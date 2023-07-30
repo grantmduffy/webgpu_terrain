@@ -13,23 +13,25 @@ precision mediump float;
 
 uniform vec2 resolution;
 uniform vec2 mouse;
+uniform int buttons;
 
 void main(){
     gl_FragColor = vec4(gl_FragCoord.xy / resolution, 0., 1.);
-    if (length(gl_FragCoord.xy - mouse) < 30.){
-        gl_FragColor = vec4(1.);
+    if ((length(gl_FragCoord.xy - mouse) < 30.) && (buttons == 1)){
+            gl_FragColor = vec4(1.);
     }
 }
 `;
 
 var mouse_x = 0.5;
 var mouse_y = 0.5;
+var buttons = 0;
 
 function mouse_move(event){
-    if (event.buttons == 1){
-        mouse_x = event.clientX;
-        mouse_y = event.srcElement.height - event.clientY;
-    }   
+    mouse_x = event.clientX;
+    mouse_y = event.srcElement.height - event.clientY;
+    buttons = event.buttons;
+    document.getElementById('text').innerText = buttons;
 }
 
 function init(){
@@ -115,12 +117,14 @@ function init(){
     var pos_attr_res = gl.getUniformLocation(program, 'resolution');
     gl.uniform2f(pos_attr_res, canvas.width, canvas.height);
     var pos_attr_mouse = gl.getUniformLocation(program, 'mouse');
+    var pos_attr_buttons = gl.getUniformLocation(program, 'buttons');
     
     // run loop
     var loop = function(){
         gl.clearColor(0, 0, 0, 1);
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
         gl.uniform2f(pos_attr_mouse, mouse_x, mouse_y);
+        gl.uniform1i(pos_attr_buttons, buttons);
         gl.drawElements(gl.TRIANGLES, tris.length, gl.UNSIGNED_SHORT, 0);
         requestAnimationFrame(loop);
     };
