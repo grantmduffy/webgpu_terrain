@@ -8,7 +8,7 @@ void main(){
 }
 `
 
-let fragment_shader_src = `
+let buffer0_fragment_shader_src = `
 precision mediump float;
 
 uniform vec2 resolution;
@@ -16,13 +16,24 @@ uniform vec2 mouse;
 uniform int buttons;
 uniform sampler2D texture0;
 
+// render self except for near mouse
 void main(){
-    // gl_FragColor = vec4(gl_FragCoord.xy / resolution, 1., 1.);
-    // gl_FragColor = texture2D(texture0, vec2(0.5));
     gl_FragColor = texture2D(texture0, gl_FragCoord.xy / resolution);
     if ((length(gl_FragCoord.xy - mouse) < 30.) && (buttons == 1)){
             gl_FragColor = vec4(vec3(0.5), 1.);
     }
+}
+`;
+
+let fragment_shader_src = `
+precision mediump float;
+
+uniform vec2 resolution;
+uniform sampler2D texture0;
+
+// simply render out buffer0
+void main(){
+    gl_FragColor = texture2D(texture0, gl_FragCoord.xy / resolution);
 }
 `;
 
@@ -57,6 +68,15 @@ function init(){
         return;
     }
 
+    // compile buffer0 fragment shader
+    var buffer0_fragment_shader = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(buffer0_fragment_shader, buffer0_fragment_shader_src);
+    gl.compileShader(buffer0_fragment_shader);
+    if (!gl.getShaderParameter(vertex_shader, gl.COMPILE_STATUS)){
+        console.error('Failed to compile buffer0 fragment shader:', gl.getShaderInfoLog(vertex_shader));
+        return;
+    }
+
     // compile fragment shader
     var fragment_shader = gl.createShader(gl.FRAGMENT_SHADER);
     gl.shaderSource(fragment_shader, fragment_shader_src);
@@ -66,23 +86,35 @@ function init(){
         return;
     }
 
-    // link program
-    var program = gl.createProgram();
-    gl.attachShader(program, fragment_shader);
-    gl.attachShader(program, vertex_shader);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)){
-        console.error('Failed to link program:', gl.getProgramInfoLog(program));
+    // link and validate buffer0 program
+    var buffer0_program = gl.createProgram();
+    gl.attachShader(buffer0_program, vertex_shader);
+    gl.attachShader(buffer0_program, fragment_shader);
+    gl.linkProgram(buffer0_program);
+    if (!gl.getProgramParameter(buffer0_program, gl.LINK_STATUS)){
+        console.error('Failed to link program:', gl.getProgramInfoLog(buffer0_program));
         return;
     }
-
-    // validate/use program
-    gl.validateProgram(program);
-    if (!gl.getProgramParameter(program, gl.VALIDATE_STATUS)){
-        console.error('Failed to validate program:', gl.getProgramInfoLog(program));
+    gl.validateProgram(buffer0_program);
+    if (!gl.getProgramParameter(buffer0_program, gl.VALIDATE_STATUS)){
+        console.error('Failed to validate program:', gl.getProgramInfoLog(buffer0_program));
         return;
     }
-    gl.useProgram(program);
+    
+    // link and validate program
+    var display_program = gl.createProgram();
+    gl.attachShader(display_program, vertex_shader);
+    gl.attachShader(display_program, fragment_shader);
+    gl.linkProgram(display_program);
+    if (!gl.getProgramParameter(display_program, gl.LINK_STATUS)){
+        console.error('Failed to link program:', gl.getProgramInfoLog(display_program));
+        return;
+    }
+    gl.validateProgram(display_program);
+    if (!gl.getProgramParameter(display_program, gl.VALIDATE_STATUS)){
+        console.error('Failed to validate program:', gl.getProgramInfoLog(display_program));
+        return;
+    }
 
     // setup vertex buffer
     var verts = [
@@ -105,7 +137,7 @@ function init(){
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(tris), gl.STATIC_DRAW);
 
     // setup vertex attributes
-    var pos_attr_loc = gl.getAttribLocation(program, 'vert_pos');
+    var pos_attr_loc = gl.getAttribLocation(display_program, 'vert_pos');
     gl.vertexAttribPointer(
         pos_attr_loc, // attr location
         2,            // # of elements per attr
@@ -116,11 +148,12 @@ function init(){
     );
     gl.enableVertexAttribArray(pos_attr_loc);
     
-    // setup uniforms
-    var pos_attr_res = gl.getUniformLocation(program, 'resolution');
+    // setup uniforms for 
+    gl.useProgram(display_program);
+    var pos_attr_res = gl.getUniformLocation(display_program, 'resolution');
     gl.uniform2f(pos_attr_res, canvas.width, canvas.height);
-    var pos_attr_mouse = gl.getUniformLocation(program, 'mouse');
-    var pos_attr_buttons = gl.getUniformLocation(program, 'buttons');
+    var pos_attr_mouse = gl.getUniformLocation(display_program, 'mouse');
+    var pos_attr_buttons = gl.getUniformLocation(display_program, 'buttons');
 
     var texture0 = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture0);
