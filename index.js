@@ -183,7 +183,7 @@ function init(){
         gl.uniformMatrix4fv(m_world_attr_loc, gl.False, M_world);
         gl.clearColor(0, 0, 0, 1);
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        // gl.drawArrays(gl.TRIANGLES, 0, 3);
         gl.drawElements(gl.TRIANGLES, tris.length, gl.UNSIGNED_SHORT, 0);
         requestAnimationFrame(loop);
     };

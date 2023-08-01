@@ -14,11 +14,14 @@ precision mediump float;
 uniform vec2 resolution;
 uniform vec2 mouse;
 uniform int buttons;
+uniform sampler2D texture0;
 
 void main(){
-    gl_FragColor = vec4(gl_FragCoord.xy / resolution, 0., 1.);
+    // gl_FragColor = vec4(gl_FragCoord.xy / resolution, 1., 1.);
+    // gl_FragColor = texture2D(texture0, vec2(0.5));
+    gl_FragColor = texture2D(texture0, gl_FragCoord.xy / resolution);
     if ((length(gl_FragCoord.xy - mouse) < 30.) && (buttons == 1)){
-            gl_FragColor = vec4(1.);
+            gl_FragColor = vec4(vec3(0.5), 1.);
     }
 }
 `;
@@ -118,6 +121,21 @@ function init(){
     gl.uniform2f(pos_attr_res, canvas.width, canvas.height);
     var pos_attr_mouse = gl.getUniformLocation(program, 'mouse');
     var pos_attr_buttons = gl.getUniformLocation(program, 'buttons');
+
+    var texture0 = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture0);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 255, 255, 255]));
+    var image = new Image();
+    image.src = 'whiteboard.jpg';
+    image.addEventListener('load', function() {
+        gl.bindTexture(gl.TEXTURE_2D, texture0);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA,gl.UNSIGNED_BYTE, image);
+    })
     
     // run loop
     var loop = function(){
