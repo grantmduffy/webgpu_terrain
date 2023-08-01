@@ -147,19 +147,13 @@ function init(){
         0             // offset to this attr
     );
     gl.enableVertexAttribArray(pos_attr_loc);
-    
-    // setup uniforms for 
-    gl.useProgram(display_program);
-    var pos_attr_res = gl.getUniformLocation(display_program, 'resolution');
-    gl.uniform2f(pos_attr_res, canvas.width, canvas.height);
-    var pos_attr_mouse = gl.getUniformLocation(display_program, 'mouse');
-    var pos_attr_buttons = gl.getUniformLocation(display_program, 'buttons');
 
+    // create texture
     var texture0 = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture0);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 255, 255, 255]));
     var image = new Image();
-    image.src = 'whiteboard.jpg';
+    image.src = 'whiteboard.png';
     image.addEventListener('load', function() {
         gl.bindTexture(gl.TEXTURE_2D, texture0);
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
@@ -167,16 +161,43 @@ function init(){
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA,gl.UNSIGNED_BYTE, image);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
     })
+
+    // setup uniforms for buffer0_program
+    gl.useProgram(buffer0_program);
+    var resolution_attr_bp = gl.getUniformLocation(buffer0_program, 'resolution');
+    gl.uniform2f(resolution_attr_bp, canvas.width, canvas.height);
+    var mouse_attr_bp = gl.getUniformLocation(buffer0_program, 'mouse');
+    var buttons_attr_bp = gl.getUniformLocation(buffer0_program, 'buttons');
+    var texture0_sampler_attr_bp = gl.getUniformLocation(buffer0_program, 'texture0');
+    gl.uniform1i(texture0_sampler_attr_bp, 0);
+
+    // setup uniforms for display_program
+    gl.useProgram(display_program);
+    var resolution_attr_dp = gl.getUniformLocation(display_program, 'resolution');
+    gl.uniform2f(resolution_attr_dp, canvas.width, canvas.height);
+    var texture0_sampler_attr_dp = gl.getUniformLocation(display_program, 'texture0');
+    gl.uniform1i(texture0_sampler_attr_dp, 0);
+
     
     // run loop
     var loop = function(){
+
+        // buffer0 pass
+        gl.useProgram(buffer0_program);
         gl.clearColor(0, 0, 0, 1);
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
-        gl.uniform2f(pos_attr_mouse, mouse_x, mouse_y);
-        gl.uniform1i(pos_attr_buttons, buttons);
+        gl.uniform2f(mouse_attr_bp, mouse_x, mouse_y);
+        gl.uniform1i(buttons_attr_bp, buttons);
         gl.drawElements(gl.TRIANGLES, tris.length, gl.UNSIGNED_SHORT, 0);
+
+        // display pass
+        gl.useProgram(display_program);
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
+        gl.drawElements(gl.TRIANGLES, tris.length, gl.UNSIGNED_SHORT, 0);
+
         requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
