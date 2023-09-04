@@ -1,4 +1,4 @@
-let vertex_shader_src = `
+let simple_vertex_shader_src = `
 precision mediump float;
 
 attribute vec2 vert_pos;
@@ -79,19 +79,6 @@ function create_buffer(data, type, draw_type){
     return buffer;
 }
 
-function set_geometry(verts, tris, program){
-    let vert_buffer = create_buffer(new Float32Array(verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
-    let tri_buffer = create_buffer(new Uint16Array(tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
-    let vert_attr = gl.getAttribLocation(program, 'vert_pos');
-    gl.vertexAttribPointer(
-        vert_attr, verts[0].length,
-        gl.FLOAT, gl.FALSE,
-        verts[0].length * 4, 0
-    );
-    gl.enableVertexAttribArray(vert_attr);
-    return vert_buffer, tri_buffer, vert_attr;
-}
-
 function set_uniforms(program){
     gl.uniform2f(gl.getUniformLocation(program, 'mouse'), mouse_x, mouse_y);
     gl.uniform1i(gl.getUniformLocation(program, 'buttons'), buttons);
@@ -162,29 +149,29 @@ function init(){
     let canvas = document.getElementById('gl-canvas');
     setup_gl(canvas);
 
-    let vertex_shader = compile_shader(vertex_shader_src, gl.VERTEX_SHADER);
+    let vertex_shader = compile_shader(simple_vertex_shader_src, gl.VERTEX_SHADER);
     let fragment_shader = compile_shader(fragment_shader_src, gl.FRAGMENT_SHADER);
     let program = link_program(vertex_shader, fragment_shader);
 
-    let verts = [
+    let plane_verts = [
         [-0.9, -0.9],
         [-0.9, 0.9],
         [0.9, -0.9],
         [0.9, 0.9]
     ];
-    let tris = [
+    let plane_tris = [
         [0, 1, 3],
         [0, 3, 2]
     ];
 
-    let vert_buffer = create_buffer(new Float32Array(verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
-    let tri_buffer = create_buffer(new Uint16Array(tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
+    let plane_vert_buffer = create_buffer(new Float32Array(plane_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+    let plane_tri_buffer = create_buffer(new Uint16Array(plane_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
 
     add_layer(
         'layer_A', program, 
-        vert_buffer, 
-        tri_buffer, 
-        tris.length
+        plane_vert_buffer, 
+        plane_tri_buffer, 
+        plane_tris.length
     );
 
     gl.useProgram(program);
