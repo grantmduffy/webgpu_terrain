@@ -27,6 +27,8 @@ var mouse_x = 0;
 var mouse_y = 0;
 var buttons = 0;
 var gl = null;
+var width = 0;
+var height = 0;
 
 var layers = [];
 
@@ -37,6 +39,8 @@ function mouse_move(event){
 }
 
 function setup_gl(canvas){
+    width = canvas.width;
+    height = canvas.height;
     gl = canvas.getContext('webgl');
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.CULL_FACE);
@@ -80,6 +84,7 @@ function create_buffer(data, type, draw_type){
 }
 
 function set_uniforms(program){
+    gl.uniform2f(gl.getUniformLocation(program, 'resolution'), width, height);
     gl.uniform2f(gl.getUniformLocation(program, 'mouse'), mouse_x, mouse_y);
     gl.uniform1i(gl.getUniformLocation(program, 'buttons'), buttons);
 }
@@ -149,10 +154,6 @@ function init(){
     let canvas = document.getElementById('gl-canvas');
     setup_gl(canvas);
 
-    let vertex_shader = compile_shader(simple_vertex_shader_src, gl.VERTEX_SHADER);
-    let fragment_shader = compile_shader(fragment_shader_src, gl.FRAGMENT_SHADER);
-    let program = link_program(vertex_shader, fragment_shader);
-
     let plane_verts = [
         [-0.9, -0.9],
         [-0.9, 0.9],
@@ -166,16 +167,17 @@ function init(){
 
     let plane_vert_buffer = create_buffer(new Float32Array(plane_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let plane_tri_buffer = create_buffer(new Uint16Array(plane_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
-
+    
+    let simple_vertex_shader = compile_shader(simple_vertex_shader_src, gl.VERTEX_SHADER);
+    let display_fragment_shader = compile_shader(fragment_shader_src, gl.FRAGMENT_SHADER);
+    let program = link_program(simple_vertex_shader, display_fragment_shader);
+    
     add_layer(
-        'layer_A', program, 
+        'render_layer', program, 
         plane_vert_buffer, 
         plane_tri_buffer, 
         plane_tris.length
     );
-
-    gl.useProgram(program);
-    gl.uniform2f(gl.getUniformLocation(program, 'resolution'), canvas.width, canvas.height);
 
     let loop = function(){
         for (i in layers){
