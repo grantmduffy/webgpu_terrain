@@ -145,57 +145,67 @@ function add_layer(
         fbo: fbo,
         active_texture: active_texture,
         sample_texture: texture1,
-        fbo_texture: texture2
+        fbo_texture: texture2,
+        test_1: 'hello',
+        test_2: 'world'
     });
 }
 
-function draw_layer(layer){
+function draw_layers(){
 
-    // bind buffers
-    gl.bindBuffer(gl.ARRAY_BUFFER, layer.vertex_buffer);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, layer.tri_buffer);
-    let pos_attr_loc = gl.getAttribLocation(layer.program, 'vert_pos');
-    gl.vertexAttribPointer(
-        pos_attr_loc, 2,
-        gl.FLOAT, gl.FALSE,
-        2 * 4, 0
-    );
-    gl.enableVertexAttribArray(pos_attr_loc);
-
-    // setup textures and framebuffer
-    gl.bindFramebuffer(gl.FRAMEBUFFER, layer.fbo);
-    if (layer.fbo != null){
-        gl.activeTexture(gl.TEXTURE0 + layer.active_texture);
-        gl.bindTexture(gl.TEXTURE_2D, layer.sample_texture);
-        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, layer.fbo_texture, 0);
-    }
-    
-    // set layer texture uniforms for this program
-    gl.useProgram(layer.program);
     for (i in layers){
-        l = layers[i];
-        if (l.sample_texture != null){
-            let loc = gl.getAttribLocation(layer.program, l.name);
-            if (loc != -1){
-                gl.uniform1i(loc, l.active_texture);
-            } else {
-                console.log(layer.name, l.name);
+
+        layer = layers[i];
+        
+        // bind buffers
+        gl.bindBuffer(gl.ARRAY_BUFFER, layer.vertex_buffer);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, layer.tri_buffer);
+        let pos_attr_loc = gl.getAttribLocation(layer.program, 'vert_pos');
+        gl.vertexAttribPointer(
+            pos_attr_loc, 2,
+            gl.FLOAT, gl.FALSE,
+            2 * 4, 0
+        );
+        gl.enableVertexAttribArray(pos_attr_loc);
+
+        // setup textures and framebuffer
+        gl.bindFramebuffer(gl.FRAMEBUFFER, layer.fbo);
+        if (layer.sample_texture != null){
+            gl.activeTexture(gl.TEXTURE0 + layer.active_texture);
+            gl.bindTexture(gl.TEXTURE_2D, layer.sample_texture);
+        }
+        if (layer.fbo != null){
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, layer.fbo_texture, 0);
+        }
+        
+        // set layer texture uniforms for this program
+        gl.useProgram(layer.program);
+        for (i in layers){
+            l = layers[i];
+            if (l.sample_texture != null){
+                let loc = gl.getUniformLocation(layer.program, l.name);
+                if (loc != null){
+                    gl.uniform1i(loc, l.active_texture);
+                } else {
+                    console.log(layer.name, l.name);
+                }
             }
         }
+
+        // set the rest of the uniforms
+        set_uniforms(layer.program);
+
+        // clear canvas
+        gl.clearColor(0, 0.5, 0.5, 1);
+        gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
+
+        // draw
+        gl.drawElements(gl.TRIANGLES, layer.n_tris * 3, gl.UNSIGNED_SHORT, 0);
+
+        // swap textures
+        [layers[i].sample_texture, layers[i].fbo_texture] = [layer.fbo_texture, layer.sample_texture];
     }
 
-    // set the rest of the uniforms
-    set_uniforms(layer.program);
-
-    // clear canvas
-    gl.clearColor(0, 0.5, 0.5, 1);
-    gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
-
-    // draw
-    gl.drawElements(gl.TRIANGLES, layer.n_tris * 3, gl.UNSIGNED_SHORT, 0);
-
-    // swap textures
-    layer.sample_texture, layer.fbo_texture = layer.fbo_texture, layer.sample_texture;
 }
 
 function init(){
@@ -223,8 +233,8 @@ function init(){
 
     let background_fragment_shader = compile_shader(background_fragment_shader_src, gl.FRAGMENT_SHADER);
     let background_program = link_program(simple_vertex_shader, background_fragment_shader);
-    let texture0 = create_texture(0, [255, 0, 255, 255]);
-    let texture1 = create_texture(1, [0, 255, 255, 255]);
+    let texture0 = create_texture(1, [255, 0, 255, 255]);
+    let texture1 = create_texture(2, [0, 255, 255, 255]);
     let background_fbo = creat_fbo(texture1);
     add_layer(
         'background_layer', 
@@ -232,7 +242,8 @@ function init(){
         plane_vert_buffer,
         plane_tri_buffer,
         plane_tris.length,
-        background_fbo,
+        // background_fbo,
+        null,
         0,
         texture0, 
         texture1
@@ -247,9 +258,7 @@ function init(){
     );
 
     let loop = function(){
-        for (i in layers){
-            draw_layer(layers[i]);
-        }
+        draw_layers();
         requestAnimationFrame(loop);
     }
     requestAnimationFrame(loop);
