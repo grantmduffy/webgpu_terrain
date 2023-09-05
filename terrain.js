@@ -8,18 +8,34 @@ void main(){
 }
 `
 
+let background_fragment_shader_src = `
+precision mediump float;
+
+uniform vec2 resolution;
+uniform vec2 mouse;
+uniform int buttons;
+uniform sampler2D background_layer;
+
+void main(){
+    gl_FragColor = texture2D(background_layer, gl_FragCoord.xy / resolution);
+    if (length(mouse - gl_FragCoord.xy) < 10.){
+        gl_FragColor = vec4(0., 1., 0., 1.);
+    }
+}
+
+`
+
 let fragment_shader_src = `
 precision mediump float;
 
 uniform vec2 resolution;
 uniform vec2 mouse;
 uniform int buttons;
+uniform sampler2D background_layer;
 
 void main(){
-    gl_FragColor = vec4(gl_FragCoord.xy / resolution, 1., 1.);
-    if (length(mouse - gl_FragCoord.xy) < 10.){
-        gl_FragColor = vec4(0., 1., 0., 1.);
-    }
+    gl_FragColor  = texture2D(background_layer, gl_FragCoord.xy / resolution);
+    // gl_FragColor = vec4(0., 1., 1., 1.);
 }
 `
 
@@ -83,6 +99,32 @@ function create_buffer(data, type, draw_type){
     return buffer;
 }
 
+function create_texture(active_texture, color=[0, 0, 0, 255]){
+    texture = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0 + active_texture);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    if (color != null){
+        color = new Uint8Array(Array(width * height).fill(color).flat());
+    }
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, color);
+    return texture;
+}
+
+function creat_fbo(texture){
+    let fbo = gl.createFramebuffer();
+    let depthbuffer = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, depthbuffer);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthbuffer);
+    return fbo;
+}
+
 function set_uniforms(program){
     gl.uniform2f(gl.getUniformLocation(program, 'resolution'), width, height);
     gl.uniform2f(gl.getUniformLocation(program, 'mouse'), mouse_x, mouse_y);
@@ -92,8 +134,7 @@ function set_uniforms(program){
 function add_layer(
         name, program, 
         vertex_buffer, tri_buffer, n_tris, fbo=null,        
-        active_texture1=null, texture1=null, 
-        active_texture2=null, texture2=null
+        active_texture=null, texture1=null, texture2=null
     ){
     layers.push({
         name: name,
@@ -102,8 +143,9 @@ function add_layer(
         tri_buffer: tri_buffer,
         n_tris: n_tris,
         fbo: fbo,
-        sample_texture: (active_texture1, texture1),
-        fbo_texture: (active_texture2, texture2)
+        active_texture: active_texture,
+        sample_texture: texture1,
+        fbo_texture: texture2
     });
 }
 
@@ -120,10 +162,12 @@ function draw_layer(layer){
     );
     gl.enableVertexAttribArray(pos_attr_loc);
 
-    // bind frame buffer
+    // setup textures and framebuffer
     gl.bindFramebuffer(gl.FRAMEBUFFER, layer.fbo);
     if (layer.fbo != null){
-        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, layer.fbo_texture[1], 0);
+        gl.activeTexture(gl.TEXTURE0 + layer.active_texture);
+        gl.bindTexture(gl.TEXTURE_2D, layer.sample_texture);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, layer.fbo_texture, 0);
     }
     
     // set layer texture uniforms for this program
@@ -131,7 +175,12 @@ function draw_layer(layer){
     for (i in layers){
         l = layers[i];
         if (l.sample_texture != null){
-            gl.uniform1i(gl.getAttribLocation(layer.program, l.name), layer.sample_texture[0]);
+            let loc = gl.getAttribLocation(layer.program, l.name);
+            if (loc != -1){
+                gl.uniform1i(loc, l.active_texture);
+            } else {
+                console.log(layer.name, l.name);
+            }
         }
     }
 
@@ -170,10 +219,28 @@ function init(){
     
     let simple_vertex_shader = compile_shader(simple_vertex_shader_src, gl.VERTEX_SHADER);
     let display_fragment_shader = compile_shader(fragment_shader_src, gl.FRAGMENT_SHADER);
-    let program = link_program(simple_vertex_shader, display_fragment_shader);
+    let render_program = link_program(simple_vertex_shader, display_fragment_shader);
+
+    let background_fragment_shader = compile_shader(background_fragment_shader_src, gl.FRAGMENT_SHADER);
+    let background_program = link_program(simple_vertex_shader, background_fragment_shader);
+    let texture0 = create_texture(0, [255, 0, 255, 255]);
+    let texture1 = create_texture(1, [0, 255, 255, 255]);
+    let background_fbo = creat_fbo(texture1);
+    add_layer(
+        'background_layer', 
+        background_program,
+        plane_vert_buffer,
+        plane_tri_buffer,
+        plane_tris.length,
+        background_fbo,
+        0,
+        texture0, 
+        texture1
+    );
     
     add_layer(
-        'render_layer', program, 
+        'render_layer', 
+        render_program, 
         plane_vert_buffer, 
         plane_tri_buffer, 
         plane_tris.length
