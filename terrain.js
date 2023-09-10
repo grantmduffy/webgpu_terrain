@@ -146,8 +146,6 @@ function add_layer(
         active_texture: active_texture,
         sample_texture: texture1,
         fbo_texture: texture2,
-        test_1: 'hello',
-        test_2: 'world'
     });
 }
 
@@ -186,8 +184,6 @@ function draw_layers(){
                 let loc = gl.getUniformLocation(layer.program, l.name);
                 if (loc != null){
                     gl.uniform1i(loc, l.active_texture);
-                } else {
-                    console.log(layer.name, l.name);
                 }
             }
         }
@@ -242,8 +238,7 @@ function init(){
         plane_vert_buffer,
         plane_tri_buffer,
         plane_tris.length,
-        // background_fbo,
-        null,
+        background_fbo,
         0,
         texture0, 
         texture1
