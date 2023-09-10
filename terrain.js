@@ -11,6 +11,8 @@ void main(){
 let background_fragment_shader_src = `
 precision mediump float;
 
+#define cursor 30.
+
 uniform vec2 resolution;
 uniform vec2 mouse;
 uniform int buttons;
@@ -18,8 +20,9 @@ uniform sampler2D background_layer;
 
 void main(){
     gl_FragColor = texture2D(background_layer, gl_FragCoord.xy / resolution);
-    if (length(mouse - gl_FragCoord.xy) < 10. && buttons == 1){
-        gl_FragColor = vec4(0., 1., 0., 1.);
+    float len = length(mouse - gl_FragCoord.xy);
+    if (len < cursor && buttons == 1){
+        gl_FragColor.rgb += 0.1 * (1. - len / cursor);
     }
 }
 
@@ -45,18 +48,23 @@ var buttons = 0;
 var gl = null;
 var width = 0;
 var height = 0;
+var offset_x = 0;
+var offset_y = 0;
 
 var layers = [];
 
 function mouse_move(event){
-    mouse_x = event.clientX;
-    mouse_y = event.srcElement.height - event.clientY;
+    mouse_x = event.clientX - offset_x;
+    mouse_y = event.srcElement.height - event.clientY + offset_y;
     buttons = event.buttons;
 }
 
 function setup_gl(canvas){
     width = canvas.width;
     height = canvas.height;
+    let rect = canvas.getBoundingClientRect();
+    offset_x = rect.left;
+    offset_y = rect.top;
     gl = canvas.getContext('webgl');
     gl.enable(gl.DEPTH_TEST);
     gl.enable(gl.CULL_FACE);
@@ -229,8 +237,8 @@ function init(){
 
     let background_fragment_shader = compile_shader(background_fragment_shader_src, gl.FRAGMENT_SHADER);
     let background_program = link_program(simple_vertex_shader, background_fragment_shader);
-    let texture0 = create_texture(1, [255, 0, 255, 255]);
-    let texture1 = create_texture(2, [0, 255, 255, 255]);
+    let texture0 = create_texture(1, [0, 0, 0, 255]);
+    let texture1 = create_texture(2, [0, 0, 0, 255]);
     let background_fbo = creat_fbo(texture1);
     add_layer(
         'background_layer', 
