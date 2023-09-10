@@ -28,7 +28,20 @@ void main(){
 
 `
 
-let fragment_shader_src = `
+let projection_vertex_shader_src = `
+precision mediump float;
+
+uniform mat4 M_proj;
+attribute vec2 vert_pos;
+
+void main(){
+    gl_Position = M_proj * vec4(vert_pos, 0., 1.);
+}
+
+`;
+
+
+let display_fragment_shader_src = `
 precision mediump float;
 
 uniform vec2 resolution;
@@ -38,7 +51,6 @@ uniform sampler2D background_layer;
 
 void main(){
     gl_FragColor  = texture2D(background_layer, gl_FragCoord.xy / resolution);
-    // gl_FragColor = vec4(0., 1., 1., 1.);
 }
 `
 
@@ -50,6 +62,10 @@ var width = 0;
 var height = 0;
 var offset_x = 0;
 var offset_y = 0;
+let M_lookat = new Float32Array(16);
+var M_proj = new Float32Array(16);
+let M_perpective = new Float32Array(16);
+var rot_horizontal = 0;
 
 var layers = [];
 
@@ -57,6 +73,21 @@ function mouse_move(event){
     mouse_x = event.clientX - offset_x;
     mouse_y = event.srcElement.height - event.clientY + offset_y;
     buttons = event.buttons;
+}
+
+function on_keydown(event){
+    if (event.keyCode == 37){
+        mat4.rotate(M_lookat, M_lookat, glMatrix.toRadian(5), [0, 1, 0]);
+    }
+    if (event.keyCode == 39){
+        mat4.rotate(M_lookat, M_lookat, glMatrix.toRadian(-5), [0, 1, 0]);
+    }
+    if (event.keyCode == 38){
+        mat4.rotate(M_lookat, M_lookat, glMatrix.toRadian(-5), [1, 0, 0]);
+    }
+    if (event.keyCode == 40){
+        mat4.rotate(M_lookat, M_lookat, glMatrix.toRadian(5), [1, 1, 0]);
+    }
 }
 
 function setup_gl(canvas){
@@ -137,6 +168,7 @@ function set_uniforms(program){
     gl.uniform2f(gl.getUniformLocation(program, 'resolution'), width, height);
     gl.uniform2f(gl.getUniformLocation(program, 'mouse'), mouse_x, mouse_y);
     gl.uniform1i(gl.getUniformLocation(program, 'buttons'), buttons);
+    gl.uniformMatrix4fv(gl.getUniformLocation(program, 'M_proj'), gl.False, M_proj);
 }
 
 function add_layer(
@@ -232,8 +264,9 @@ function init(){
     let plane_tri_buffer = create_buffer(new Uint16Array(plane_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
     
     let simple_vertex_shader = compile_shader(simple_vertex_shader_src, gl.VERTEX_SHADER);
-    let display_fragment_shader = compile_shader(fragment_shader_src, gl.FRAGMENT_SHADER);
-    let render_program = link_program(simple_vertex_shader, display_fragment_shader);
+    let display_fragment_shader = compile_shader(display_fragment_shader_src, gl.FRAGMENT_SHADER);
+    let projection_vertex_shader = compile_shader(projection_vertex_shader_src, gl.VERTEX_SHADER);
+    let render_program = link_program(projection_vertex_shader, display_fragment_shader);
 
     let background_fragment_shader = compile_shader(background_fragment_shader_src, gl.FRAGMENT_SHADER);
     let background_program = link_program(simple_vertex_shader, background_fragment_shader);
@@ -260,7 +293,13 @@ function init(){
         plane_tris.length
     );
 
+    // mat4.identity(M_proj);
+    mat4.lookAt(M_lookat, [0, 0, 3], [0, 0, 0], [0, 1, 0]);
+    mat4.perspective(M_perpective, glMatrix.toRadian(45), width / height, 0.1, 1000.0);
+    
+
     let loop = function(){
+        mat4.multiply(M_proj, M_perpective, M_lookat);
         draw_layers();
         requestAnimationFrame(loop);
     }
