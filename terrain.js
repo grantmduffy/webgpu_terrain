@@ -18,7 +18,7 @@ uniform sampler2D background_layer;
 
 void main(){
     gl_FragColor = texture2D(background_layer, gl_FragCoord.xy / resolution);
-    if (length(mouse - gl_FragCoord.xy) < 10.){
+    if (length(mouse - gl_FragCoord.xy) < 10. && buttons == 1){
         gl_FragColor = vec4(0., 1., 0., 1.);
     }
 }
@@ -178,8 +178,8 @@ function draw_layers(){
         
         // set layer texture uniforms for this program
         gl.useProgram(layer.program);
-        for (i in layers){
-            l = layers[i];
+        for (j in layers){
+            l = layers[j];
             if (l.sample_texture != null){
                 let loc = gl.getUniformLocation(layer.program, l.name);
                 if (loc != null){
