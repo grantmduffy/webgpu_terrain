@@ -2,9 +2,11 @@ let simple_vertex_shader_src = `
 precision mediump float;
 
 attribute vec2 vert_pos;
+varying vec2 xy;
 
 void main(){
     gl_Position = vec4(vert_pos, 0., 1.);
+    xy = vert_pos;
 }
 `
 
@@ -17,10 +19,14 @@ uniform vec2 resolution;
 uniform vec2 mouse;
 uniform int buttons;
 uniform sampler2D background_layer;
+uniform mat4 M_proj;
+varying vec2 xy;
 
 void main(){
+    vec4 xyz = M_proj * vec4(xy, 0., 1.);
+    xyz /= xyz.w;
     gl_FragColor = texture2D(background_layer, gl_FragCoord.xy / resolution);
-    float len = length(mouse - gl_FragCoord.xy);
+    float len = length((xyz.xy + 1.) * resolution / 2. - mouse);
     if (len < cursor && buttons == 1){
         gl_FragColor.rgb += 0.1 * (1. - len / cursor);
     }
@@ -34,10 +40,13 @@ precision mediump float;
 uniform mat4 M_proj;
 attribute vec2 vert_pos;
 varying vec2 uv;
+uniform sampler2D background_layer;
 
 void main(){
-    gl_Position = M_proj * vec4(vert_pos, 0., 1.);
     uv = (vert_pos + 1.) / 2.;
+    float z = texture2D(background_layer, uv).r;
+    // gl_Position = M_proj * vec4(vert_pos, z, 1.);
+    gl_Position = M_proj * vec4(vert_pos, 0., 1.);
 }
 
 `;
