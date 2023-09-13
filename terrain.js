@@ -33,9 +33,11 @@ precision mediump float;
 
 uniform mat4 M_proj;
 attribute vec2 vert_pos;
+varying vec2 uv;
 
 void main(){
     gl_Position = M_proj * vec4(vert_pos, 0., 1.);
+    uv = (vert_pos + 1.) / 2.;
 }
 
 `;
@@ -50,12 +52,10 @@ uniform int buttons;
 uniform sampler2D background_layer;
 uniform mat4 M_proj_inv;
 uniform mat4 M_proj;
+varying vec2 uv;
 
 void main(){
-    vec4 xyz = vec4(gl_FragCoord.xy * 2. / resolution - 1., gl_FragCoord.z, 1.) / gl_FragCoord.w;
-    xyz = M_proj_inv * xyz;
-    // gl_FragColor = vec4(1., xyz.xy, 1.);
-    gl_FragColor  = texture2D(background_layer, (xyz.xy + 1.) / 2.);
+    gl_FragColor = texture2D(background_layer, uv);
 }
 `
 
