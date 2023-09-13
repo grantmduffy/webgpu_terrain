@@ -48,9 +48,14 @@ uniform vec2 resolution;
 uniform vec2 mouse;
 uniform int buttons;
 uniform sampler2D background_layer;
+uniform mat4 M_proj_inv;
+uniform mat4 M_proj;
 
 void main(){
-    gl_FragColor  = texture2D(background_layer, gl_FragCoord.xy / resolution);
+    vec4 xyz = vec4(gl_FragCoord.xy * 2. / resolution - 1., gl_FragCoord.z, 1.) / gl_FragCoord.w;
+    xyz = M_proj_inv * xyz;
+    // gl_FragColor = vec4(1., xyz.xy, 1.);
+    gl_FragColor  = texture2D(background_layer, (xyz.xy + 1.) / 2.);
 }
 `
 
@@ -65,6 +70,7 @@ var offset_y = 0;
 let M_lookat = new Float32Array(16);
 var M_proj = new Float32Array(16);
 let M_perpective = new Float32Array(16);
+let M_proj_inv = new Float32Array(16);
 var rot_horizontal = 0;
 
 var layers = [];
@@ -86,7 +92,7 @@ function on_keydown(event){
         mat4.rotate(M_lookat, M_lookat, glMatrix.toRadian(-5), [1, 0, 0]);
     }
     if (event.keyCode == 40){
-        mat4.rotate(M_lookat, M_lookat, glMatrix.toRadian(5), [1, 1, 0]);
+        mat4.rotate(M_lookat, M_lookat, glMatrix.toRadian(5), [1, 0, 0]);
     }
 }
 
@@ -169,6 +175,7 @@ function set_uniforms(program){
     gl.uniform2f(gl.getUniformLocation(program, 'mouse'), mouse_x, mouse_y);
     gl.uniform1i(gl.getUniformLocation(program, 'buttons'), buttons);
     gl.uniformMatrix4fv(gl.getUniformLocation(program, 'M_proj'), gl.False, M_proj);
+    gl.uniformMatrix4fv(gl.getUniformLocation(program, 'M_proj_inv'), gl.False, M_proj_inv);
 }
 
 function add_layer(
@@ -250,10 +257,10 @@ function init(){
     setup_gl(canvas);
 
     let plane_verts = [
-        [-0.9, -0.9],
-        [-0.9, 0.9],
-        [0.9, -0.9],
-        [0.9, 0.9]
+        [-1, -1],
+        [-1, 1],
+        [1, -1],
+        [1, 1]
     ];
     let plane_tris = [
         [0, 1, 3],
@@ -300,6 +307,7 @@ function init(){
 
     let loop = function(){
         mat4.multiply(M_proj, M_perpective, M_lookat);
+        mat4.invert(M_proj_inv, M_proj);
         draw_layers();
         requestAnimationFrame(loop);
     }
