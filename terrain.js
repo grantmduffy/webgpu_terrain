@@ -3,10 +3,12 @@ precision mediump float;
 
 attribute vec2 vert_pos;
 varying vec2 xy;
+varying vec2 uv;
 
 void main(){
     gl_Position = vec4(vert_pos, 0., 1.);
     xy = vert_pos;
+    uv = (vert_pos / 100. + 1.) / 2.;
 }
 `
 
@@ -20,9 +22,9 @@ uniform vec2 mouse;
 uniform int buttons;
 uniform sampler2D background_layer;
 uniform mat4 M_proj;
-varying vec2 xy;
 
 void main(){
+    vec2 xy = (2. * gl_FragCoord.xy / resolution - 1.) * 100.;
     vec4 xyz = M_proj * vec4(xy, 0., 1.);
     xyz /= xyz.w;
     gl_FragColor = texture2D(background_layer, gl_FragCoord.xy / resolution);
@@ -43,7 +45,7 @@ varying vec2 uv;
 uniform sampler2D background_layer;
 
 void main(){
-    uv = (vert_pos + 1.) / 2.;
+    uv = (vert_pos / 100. + 1.) / 2.;
     float z = texture2D(background_layer, uv).r;
     // gl_Position = M_proj * vec4(vert_pos, z, 1.);
     gl_Position = M_proj * vec4(vert_pos, 0., 1.);
@@ -65,6 +67,8 @@ varying vec2 uv;
 
 void main(){
     gl_FragColor = texture2D(background_layer, uv);
+    // gl_FragColor = vec4(1., 0., 0., 1.);
+    // gl_FragColor = vec4(uv, 0., 1.);
 }
 `
 
@@ -248,7 +252,8 @@ function draw_layers(){
         set_uniforms(layer.program);
 
         // clear canvas
-        gl.clearColor(0, 0.5, 0.5, 1);
+        // gl.clearColor(1., 0., 0., 1.);
+        gl.clearColor(172 / 255, 214 / 255, 242 / 255, 1);
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
 
         // draw
@@ -266,10 +271,10 @@ function init(){
     setup_gl(canvas);
 
     let plane_verts = [
-        [-1, -1],
-        [-1, 1],
-        [1, -1],
-        [1, 1]
+        [-100, -100],
+        [-100, 100],
+        [100, -100],
+        [100, 100]
     ];
     let plane_tris = [
         [0, 1, 3],
@@ -310,7 +315,8 @@ function init(){
     );
 
     // mat4.identity(M_proj);
-    mat4.lookAt(M_lookat, [0, 0, 3], [0, 0, 0], [0, 1, 0]);
+    // mat4.lookAt(M_lookat, [0, 0, 3], [0, 0, 0], [0, 1, 0]);
+    mat4.lookAt(M_lookat, [0, 0, 300], [0, 0, 0], [0, 1, 0]);
     mat4.perspective(M_perpective, glMatrix.toRadian(45), width / height, 0.1, 1000.0);
     
 
