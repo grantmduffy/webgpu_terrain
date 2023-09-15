@@ -80,6 +80,12 @@ var width = 0;
 var height = 0;
 var offset_x = 0;
 var offset_y = 0;
+var rot_pitch = 0;
+var rot_yaw = 0;
+let speed = 2;
+let rot_speed = 5;
+let V_position = new Float32Array(2);
+let V_direction = new Float32Array(2);
 let M_lookat = new Float32Array(16);
 var M_proj = new Float32Array(16);
 let M_perpective = new Float32Array(16);
@@ -95,18 +101,42 @@ function mouse_move(event){
 }
 
 function on_keydown(event){
-    if (event.keyCode == 37){
-        mat4.rotate(M_lookat, M_lookat, glMatrix.toRadian(5), [0, 1, 0]);
+    v = [Math.cos(glMatrix.toRadian(rot_yaw)), -Math.sin(glMatrix.toRadian(rot_yaw))];
+    switch (event.keyCode){
+        case 37:  // left
+            rot_yaw -= rot_speed;
+            break;
+        case 39:  // right
+            rot_yaw += rot_speed;
+            break;
+        case 38:  // up
+            rot_pitch += rot_speed;
+            break;
+        case 40:  // down
+            rot_pitch -= rot_speed;
+            break;
+        case 65:  // A
+            V_position[0] += speed * v[1];
+            V_position[1] -= speed * v[0];
+            break;
+        case 68:  // D
+            V_position[0] -= speed * v[1];
+            V_position[1] += speed * v[0];
+            break;
+        case 87:  // W
+            V_position[0] -= speed * v[0];
+            V_position[1] -= speed * v[1];
+            break;
+        case 83:  // S
+            V_position[0] += speed * v[0];
+            V_position[1] += speed * v[1];
+            break;
     }
-    if (event.keyCode == 39){
-        mat4.rotate(M_lookat, M_lookat, glMatrix.toRadian(-5), [0, 1, 0]);
-    }
-    if (event.keyCode == 38){
-        mat4.rotate(M_lookat, M_lookat, glMatrix.toRadian(-5), [1, 0, 0]);
-    }
-    if (event.keyCode == 40){
-        mat4.rotate(M_lookat, M_lookat, glMatrix.toRadian(5), [1, 0, 0]);
-    }
+    document.getElementById('debug').innerText = `\
+    p=(${V_position[0].toFixed(4)}, ${V_position[1].toFixed(4)})\n\
+    rot=${rot_yaw.toFixed(4)}\n\
+    v=(${Math.cos(glMatrix.toRadian(rot_yaw)).toFixed(4)}, \
+    ${Math.sin(glMatrix.toRadian(rot_yaw)).toFixed(4)})`;
 }
 
 function setup_gl(canvas){
@@ -117,9 +147,9 @@ function setup_gl(canvas){
     offset_y = rect.top;
     gl = canvas.getContext('webgl');
     gl.enable(gl.DEPTH_TEST);
-    gl.enable(gl.CULL_FACE);
+    // gl.enable(gl.CULL_FACE);
     gl.frontFace(gl.CW);
-    gl.cullFace(gl.BACK);
+    // gl.cullFace(gl.BACK);
 }
 
 function compile_shader(source, type){
@@ -314,14 +344,14 @@ function init(){
         plane_tris.length
     );
 
-    // mat4.identity(M_proj);
-    // mat4.lookAt(M_lookat, [0, 0, 3], [0, 0, 0], [0, 1, 0]);
-    mat4.lookAt(M_lookat, [0, 0, 300], [0, 0, 0], [0, 1, 0]);
     mat4.perspective(M_perpective, glMatrix.toRadian(45), width / height, 0.1, 1000.0);
-    
+    mat4.lookAt(M_lookat, [0, 0, 0], [1, 0, 0], [0, 0, 1]);
 
     let loop = function(){
-        mat4.multiply(M_proj, M_perpective, M_lookat);
+        mat4.rotate(M_proj, M_lookat, glMatrix.toRadian(rot_pitch), [0, 1, 0]);
+        mat4.rotate(M_proj, M_proj, glMatrix.toRadian(rot_yaw), [0, 0, 1]);
+        mat4.translate(M_proj, M_proj, [V_position[0], V_position[1], -3]);
+        mat4.multiply(M_proj, M_perpective, M_proj);
         mat4.invert(M_proj_inv, M_proj);
         draw_layers();
         requestAnimationFrame(loop);
