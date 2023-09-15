@@ -8,7 +8,7 @@ void main(){
     gl_Position = vec4(vert_pos, 0., 1.);
     xy = vert_pos;
 }
-`
+`;
 
 let background_fragment_shader_src = `
 precision mediump float;
@@ -32,8 +32,7 @@ void main(){
         gl_FragColor.rgb += 0.1 * (1. - len / cursor);
     }
 }
-
-`
+`;
 
 let projection_vertex_shader_src = `
 precision mediump float;
@@ -62,9 +61,30 @@ varying vec2 uv;
 
 void main(){
     gl_FragColor = texture2D(background_layer, uv);
-    gl_FragColor.a = 0.5;
+    // gl_FragColor.a = 0.5;
 }
-`
+`;
+
+let radial_vertex_shader_src = `
+precision mediump float;
+
+attribute vec2 vert_pos;
+uniform mat4 M_radial_proj;
+
+void main(){
+    gl_Position = M_radial_proj * vec4(vert_pos, 0.01, 1.);
+}
+`;
+
+let radial_fragment_shader_src = `
+precision mediump float;
+
+void main(){
+    gl_FragColor = vec4(1., 0., 1., 1.);
+}
+
+`;
+
 
 var mouse_x = 0;
 var mouse_y = 0;
@@ -83,6 +103,7 @@ let V_direction = new Float32Array(2);
 let M_lookat = new Float32Array(16);
 var M_proj = new Float32Array(16);
 let M_perpective = new Float32Array(16);
+let M_radial_proj = new Float32Array(16);
 var rot_horizontal = 0;
 const texture_res = 512;
 
@@ -213,12 +234,14 @@ function set_uniforms(program){
     gl.uniform2f(gl.getUniformLocation(program, 'mouse'), mouse_x, mouse_y);
     gl.uniform1i(gl.getUniformLocation(program, 'buttons'), buttons);
     gl.uniformMatrix4fv(gl.getUniformLocation(program, 'M_proj'), gl.False, M_proj);
+    // gl.uniformMatrix4fv(gl.getUniformLocation(program, 'M_radial_proj'), gl.False, M_proj);
+    gl.uniformMatrix4fv(gl.getUniformLocation(program, 'M_radial_proj'), gl.False, M_radial_proj);
 }
 
 function add_layer(
         name, program, 
-        vertex_buffer, tri_buffer, n_tris, fbo=null,        
-        active_texture=null, texture1=null, texture2=null
+        vertex_buffer, tri_buffer, n_tris, clear=true, fbo=null,        
+        active_texture=null, texture1=null, texture2=null,
     ){
     layers.push({
         name: name,
@@ -230,6 +253,7 @@ function add_layer(
         active_texture: active_texture,
         sample_texture: texture1,
         fbo_texture: texture2,
+        clear: clear
     });
 }
 
@@ -277,8 +301,10 @@ function draw_layers(){
 
         // clear canvas
         // gl.clearColor(1., 0., 0., 1.);
-        gl.clearColor(172 / 255, 214 / 255, 242 / 255, 1);
-        gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
+        if (layer.clear){
+            gl.clearColor(172 / 255, 214 / 255, 242 / 255, 1);
+            gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
+        }
 
         // draw
         gl.drawElements(gl.TRIANGLES, layer.n_tris * 3, gl.UNSIGNED_SHORT, 0);
@@ -318,12 +344,20 @@ function init(){
     let texture0 = create_texture(1, [0, 0, 0, 255], texture_res, texture_res);
     let texture1 = create_texture(2, [0, 0, 0, 255], texture_res, texture_res);
     let background_fbo = create_fbo(texture1, texture_res, texture_res);
+
+    let radial_vert_buffer = create_buffer(new Float32Array(radial_mesh.verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+    let radial_tri_buffer = create_buffer(new Uint16Array(radial_mesh.tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
+    let radial_vertex_shader = compile_shader(radial_vertex_shader_src, gl.VERTEX_SHADER);
+    let radial_fragment_shader = compile_shader(radial_fragment_shader_src, gl.FRAGMENT_SHADER);
+    let radial_program = link_program(radial_vertex_shader, radial_fragment_shader);
+
     add_layer(
         'background_layer', 
         background_program,
         plane_vert_buffer,
         plane_tri_buffer,
         plane_tris.length,
+        true,
         background_fbo,
         0,
         texture0, 
@@ -338,6 +372,15 @@ function init(){
         plane_tris.length
     );
 
+    add_layer(
+        'radial_layer',
+        radial_program,
+        radial_vert_buffer,
+        radial_tri_buffer,
+        radial_mesh.tris.length,
+        false
+    );
+
     mat4.perspective(M_perpective, glMatrix.toRadian(45), width / height, 0.1, 1000.0);
     mat4.lookAt(M_lookat, [0, 0, 0], [1, 0, 0], [0, 0, 1]);
 
@@ -346,6 +389,13 @@ function init(){
         mat4.rotate(M_proj, M_proj, glMatrix.toRadian(rot_yaw), [0, 0, 1]);
         mat4.translate(M_proj, M_proj, [V_position[0], V_position[1], -3]);
         mat4.multiply(M_proj, M_perpective, M_proj);
+
+        mat4.rotate(M_radial_proj, M_lookat, glMatrix.toRadian(rot_pitch), [0, 1, 0]);
+        // mat4.rotate(M_radial_proj, M_radial_proj, glMatrix.toRadian(rot_yaw), [0, 0, 1]);
+        mat4.translate(M_radial_proj, M_radial_proj, [0, 0, -3]);
+        mat4.multiply(M_radial_proj, M_perpective, M_radial_proj);
+
+        
         draw_layers();
         requestAnimationFrame(loop);
     }
