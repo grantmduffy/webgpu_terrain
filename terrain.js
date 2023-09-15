@@ -16,16 +16,17 @@ precision mediump float;
 #define cursor 30.
 
 uniform vec2 resolution;
+uniform vec2 tex_res;
 uniform vec2 mouse;
 uniform int buttons;
 uniform sampler2D background_layer;
 uniform mat4 M_proj;
 
 void main(){
-    vec2 xy = (2. * gl_FragCoord.xy / resolution - 1.) * 100.;
+    vec2 xy = (2. * gl_FragCoord.xy / tex_res - 1.) * 100.;
     vec4 xyz = M_proj * vec4(xy, 0., 1.);
     xyz /= xyz.w;
-    gl_FragColor = texture2D(background_layer, gl_FragCoord.xy / resolution);
+    gl_FragColor = texture2D(background_layer, gl_FragCoord.xy / tex_res);
     float len = length((xyz.xy + 1.) * resolution / 2. - mouse);
     if (len < cursor && buttons == 1){
         gl_FragColor.rgb += 0.1 * (1. - len / cursor);
@@ -54,7 +55,6 @@ void main(){
 let display_fragment_shader_src = `
 precision mediump float;
 
-uniform vec2 resolution;
 uniform vec2 mouse;
 uniform int buttons;
 uniform sampler2D background_layer;
@@ -62,6 +62,7 @@ varying vec2 uv;
 
 void main(){
     gl_FragColor = texture2D(background_layer, uv);
+    gl_FragColor.a = 0.5;
 }
 `
 
@@ -75,14 +76,15 @@ var offset_x = 0;
 var offset_y = 0;
 var rot_pitch = 0;
 var rot_yaw = 0;
-let speed = 2;
-let rot_speed = 5;
+const speed = 2;
+const rot_speed = 5;
 let V_position = new Float32Array(2);
 let V_direction = new Float32Array(2);
 let M_lookat = new Float32Array(16);
 var M_proj = new Float32Array(16);
 let M_perpective = new Float32Array(16);
 var rot_horizontal = 0;
+const texture_res = 512;
 
 var layers = [];
 
@@ -179,7 +181,7 @@ function create_buffer(data, type, draw_type){
     return buffer;
 }
 
-function create_texture(active_texture, color=[0, 0, 0, 255]){
+function create_texture(active_texture, color=[0, 0, 0, 255], width, height){
     texture = gl.createTexture();
     gl.activeTexture(gl.TEXTURE0 + active_texture);
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -194,7 +196,7 @@ function create_texture(active_texture, color=[0, 0, 0, 255]){
     return texture;
 }
 
-function creat_fbo(texture){
+function create_fbo(texture, width, height){
     let fbo = gl.createFramebuffer();
     let depthbuffer = gl.createRenderbuffer();
     gl.bindRenderbuffer(gl.RENDERBUFFER, depthbuffer);
@@ -207,6 +209,7 @@ function creat_fbo(texture){
 
 function set_uniforms(program){
     gl.uniform2f(gl.getUniformLocation(program, 'resolution'), width, height);
+    gl.uniform2f(gl.getUniformLocation(program, 'tex_res'), texture_res, texture_res);
     gl.uniform2f(gl.getUniformLocation(program, 'mouse'), mouse_x, mouse_y);
     gl.uniform1i(gl.getUniformLocation(program, 'buttons'), buttons);
     gl.uniformMatrix4fv(gl.getUniformLocation(program, 'M_proj'), gl.False, M_proj);
@@ -312,9 +315,9 @@ function init(){
 
     let background_fragment_shader = compile_shader(background_fragment_shader_src, gl.FRAGMENT_SHADER);
     let background_program = link_program(simple_vertex_shader, background_fragment_shader);
-    let texture0 = create_texture(1, [0, 0, 0, 255]);
-    let texture1 = create_texture(2, [0, 0, 0, 255]);
-    let background_fbo = creat_fbo(texture1);
+    let texture0 = create_texture(1, [0, 0, 0, 255], texture_res, texture_res);
+    let texture1 = create_texture(2, [0, 0, 0, 255], texture_res, texture_res);
+    let background_fbo = create_fbo(texture1, texture_res, texture_res);
     add_layer(
         'background_layer', 
         background_program,
