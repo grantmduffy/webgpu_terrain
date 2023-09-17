@@ -1,3 +1,5 @@
+// python -m http.server 8888
+
 let simple_vertex_shader_src = `
 precision mediump float;
 
@@ -124,7 +126,8 @@ var M_proj = new Float32Array(16);
 let M_perpective = new Float32Array(16);
 let M_radial = new Float32Array(16);
 var rot_horizontal = 0;
-const texture_res = 1024;
+const texture_res = 256;
+const fps = 60;
 
 var layers = [];
 
@@ -172,11 +175,11 @@ function on_keydown(event){
             camera_height -= vert_speed;
             break;
     }
-    document.getElementById('debug').innerText = `\
-    p=(${V_position[0].toFixed(4)}, ${V_position[1].toFixed(4)})\n\
-    rot=${rot_yaw.toFixed(4)}\n\
-    v=(${Math.cos(glMatrix.toRadian(rot_yaw)).toFixed(4)}, \
-    ${Math.sin(glMatrix.toRadian(rot_yaw)).toFixed(4)})`;
+    // document.getElementById('debug').innerText = `\
+    // p=(${V_position[0].toFixed(4)}, ${V_position[1].toFixed(4)})\n\
+    // rot=${rot_yaw.toFixed(4)}\n\
+    // v=(${Math.cos(glMatrix.toRadian(rot_yaw)).toFixed(4)}, \
+    // ${Math.sin(glMatrix.toRadian(rot_yaw)).toFixed(4)})`;
 }
 
 function setup_gl(canvas){
@@ -339,7 +342,6 @@ function draw_layers(){
         // swap textures
         [layers[i].sample_texture, layers[i].fbo_texture] = [layer.fbo_texture, layer.sample_texture];
     }
-
 }
 
 function init(){
@@ -422,7 +424,7 @@ function init(){
         mat4.rotate(M_radial, M_radial, glMatrix.toRadian(rot_yaw), [0, 0, 1]);
         
         draw_layers();
-        requestAnimationFrame(loop);
+        setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
     }
     requestAnimationFrame(loop);
 
