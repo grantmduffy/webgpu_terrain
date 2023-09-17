@@ -30,7 +30,8 @@ void main(){
     float len = length((xyz.xy + 1.) * resolution / 2. - mouse);
     // gl_FragColor = vec4(1., 0., 1., 1.);
     if (len < cursor && buttons == 1){
-        gl_FragColor.rgb += 0.1 * (1. - len / cursor);
+        float x = len / cursor;
+        gl_FragColor.rgb += 0.1 * (1. -  x * x * (3. - 2. * x));
         // gl_FragColor.rgb = vec3(4., 1., 0.);
     }
 }
