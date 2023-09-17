@@ -23,15 +23,17 @@ uniform sampler2D background_layer;
 uniform mat4 M_proj;
 
 void main(){
+    gl_FragColor = texture2D(background_layer, gl_FragCoord.xy / tex_res);
+    float z = gl_FragColor.r;
     vec2 xy = (2. * gl_FragCoord.xy / tex_res - 1.) * 100.;
+    // vec4 xyz = M_proj * vec4(xy, z, 1.);
     vec4 xyz = M_proj * vec4(xy, 0., 1.);
     xyz /= xyz.w;
-    gl_FragColor = texture2D(background_layer, gl_FragCoord.xy / tex_res);
     float len = length((xyz.xy + 1.) * resolution / 2. - mouse);
     // gl_FragColor = vec4(1., 0., 1., 1.);
     if (len < cursor && buttons == 1){
         float x = len / cursor;
-        gl_FragColor.rgb += 0.1 * (1. -  x * x * (3. - 2. * x));
+        gl_FragColor.rgb += 0.05 * (1. -  x * x * (3. - 2. * x));
         // gl_FragColor.rgb = vec3(4., 1., 0.);
     }
 }
