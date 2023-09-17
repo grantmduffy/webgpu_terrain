@@ -112,7 +112,9 @@ var rot_pitch = 0;
 var rot_yaw = 0;
 const speed = 2;
 const rot_speed = 5;
+const vert_speed = 0.5;
 let V_position = new Float32Array(2);
+var camera_height = 3.0;
 let V_direction = new Float32Array(2);
 let M_lookat = new Float32Array(16);
 var M_proj = new Float32Array(16);
@@ -159,6 +161,12 @@ function on_keydown(event){
         case 83:  // S
             V_position[0] -= speed * v[0];
             V_position[1] -= speed * v[1];
+            break;
+        case 69:
+            camera_height += vert_speed;
+            break;
+        case 81:
+            camera_height -= vert_speed;
             break;
     }
     document.getElementById('debug').innerText = `\
@@ -403,7 +411,7 @@ function init(){
     let loop = function(){
         mat4.rotate(M_proj, M_lookat, glMatrix.toRadian(-rot_pitch), [0, 1, 0]);
         mat4.rotate(M_proj, M_proj, glMatrix.toRadian(-rot_yaw), [0, 0, 1]);
-        mat4.translate(M_proj, M_proj, [-V_position[0], -V_position[1], -3]);
+        mat4.translate(M_proj, M_proj, [-V_position[0], -V_position[1], -camera_height]);
         mat4.multiply(M_proj, M_perpective, M_proj);
 
         mat4.identity(M_radial);
