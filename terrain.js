@@ -192,9 +192,12 @@ function setup_gl(canvas){
     gl.getExtension("OES_texture_float");
     gl.getExtension("OES_texture_float_linear");
     gl.enable(gl.DEPTH_TEST);
-    // gl.enable(gl.CULL_FACE);
     gl.frontFace(gl.CW);
-    // gl.cullFace(gl.BACK);
+    // gl.enable(gl.CULL_FACE);
+    // gl.cullFace(gl.FRONT);
+    gl.enable(gl.BLEND);
+    gl.blendEquation(gl.FUNC_ADD);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 }
 
 function compile_shader(source, type){
