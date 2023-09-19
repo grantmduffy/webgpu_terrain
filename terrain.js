@@ -93,13 +93,22 @@ void main(){
 let camera_fragment_shader_src = `
 precision mediump float;
 
+#define gamma 500.
+
 varying vec2 uv;
 uniform sampler2D background_layer;
 uniform vec2 tex_res;
 
+vec4 fog_color = vec4(0.6745098039215687, 0.8392156862745098, 0.9490196078431372, 1.);
+
 void main(){
+    float fog_amount = pow(gl_FragCoord.z, gamma);
     float val = texture2D(background_layer, uv + 1. / tex_res).x - texture2D(background_layer, uv - 1. / tex_res).x + 0.5;
     gl_FragColor = vec4(val, val, val, 1.);
+    gl_FragColor *= 1. - fog_amount;
+    gl_FragColor += fog_amount * fog_color;
+    // vec4 tex_value = texture2D(background_layer, uv);
+    // gl_FragColor = vec4(0., fog_amount, 1., 1.);
 }
 
 `;
@@ -192,9 +201,10 @@ function setup_gl(canvas){
     gl.getExtension("OES_texture_float");
     gl.getExtension("OES_texture_float_linear");
     gl.enable(gl.DEPTH_TEST);
-    gl.frontFace(gl.CW);
+    // gl.frontFace(gl.CCW);
     // gl.enable(gl.CULL_FACE);
     // gl.cullFace(gl.FRONT);
+    // gl.cullFace(gl.BACK);
     gl.enable(gl.BLEND);
     gl.blendEquation(gl.FUNC_ADD);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -396,13 +406,13 @@ function init(){
         texture1
     );
     
-    add_layer(
-        'render_layer', 
-        render_program, 
-        plane_vert_buffer, 
-        plane_tri_buffer, 
-        plane_tris.length
-    );
+    // add_layer(
+    //     'render_layer', 
+    //     render_program, 
+    //     plane_vert_buffer, 
+    //     plane_tri_buffer, 
+    //     plane_tris.length
+    // );
 
     add_layer(
         'camera_layer',
@@ -410,10 +420,10 @@ function init(){
         camera_vert_buffer,
         camera_tri_buffer,
         camera_mesh.tris.length,
-        false
+        true
     );
 
-    mat4.perspective(M_perpective, glMatrix.toRadian(45), width / height, 0.1, 1000.0);
+    mat4.perspective(M_perpective, glMatrix.toRadian(45), width / height, 0.1, 100.0);
     mat4.lookAt(M_lookat, [0, 0, 0], [1, 0, 0], [0, 0, 1]);
 
     let loop = function(){
