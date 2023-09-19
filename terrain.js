@@ -23,21 +23,24 @@ uniform vec2 mouse;
 uniform int buttons;
 uniform sampler2D background_layer;
 uniform mat4 M_proj;
+uniform int frame_i;
 
 void main(){
     gl_FragColor = texture2D(background_layer, gl_FragCoord.xy / tex_res);
-    float z = gl_FragColor.r;
     vec2 xy = (2. * gl_FragCoord.xy / tex_res - 1.) * 100.;
-    // vec4 xyz = M_proj * vec4(xy, z, 1.);
     vec4 xyz = M_proj * vec4(xy, 0., 1.);
     xyz /= xyz.w;
     float len = length((xyz.xy + 1.) * resolution / 2. - mouse);
-    // gl_FragColor = vec4(1., 0., 1., 1.);
+    float x = len / cursor;
     if (len < cursor && buttons == 1){
-        float x = len / cursor;
-        gl_FragColor.rgb += 0.05 * (1. -  x * x * (3. - 2. * x));
-        // gl_FragColor.rgb = vec3(4., 1., 0.);
+        gl_FragColor.r += 0.05 * (1. -  x * x * (3. - 2. * x));
     }
+    if (len < cursor && buttons == 2){
+        gl_FragColor.g += 0.01 * (1. -  x * x * (3. - 2. * x));
+    }
+    // if (frame_i == 0){
+    //     gl_FragColor = vec4(0., 0., 0., 1.);
+    // }
 }
 `;
 
@@ -47,11 +50,9 @@ precision mediump float;
 uniform mat4 M_proj;
 attribute vec2 vert_pos;
 varying vec2 uv;
-uniform sampler2D background_layer;
 
 void main(){
     uv = (vert_pos / 100. + 1.) / 2.;
-    float z = texture2D(background_layer, uv).r;
     gl_Position = M_proj * vec4(vert_pos, 0., 1.);
 }
 
@@ -114,8 +115,73 @@ void main(){
     float val = max(dot(normal, sun_direction), 0.);
     gl_FragColor = sun_color * terrain_color;
     gl_FragColor.rgb *= val;
+    // gl_FragColor *= 1. - fog_amount;
+    // gl_FragColor += fog_amount * fog_color;
+    gl_FragColor.a = 1.;
+}
+
+`;
+
+let water_vertex_shader_src = `
+precision mediump float;
+
+attribute vec2 vert_pos;
+uniform mat4 M_camera;
+uniform mat4 M_proj;
+uniform sampler2D background_layer;
+varying vec2 uv;
+
+void main(){
+    vec4 world_coords = M_camera * vec4(vert_pos, 0., 1.);
+    uv = (world_coords.xy / 100. + 1.) / 2.;
+    float elevation = dot(texture2D(background_layer, uv).xy, vec2(1.));
+    // float elevation = texture2D(background_layer, uv).y;
+    // float elevation = texture2D(background_layer, uv).y;
+    world_coords.z = elevation;
+    gl_Position = M_proj * world_coords;
+}
+`;
+
+let water_fragment_shader_src = `
+precision mediump float;
+
+#define gamma 500.
+
+varying vec2 uv;
+uniform sampler2D background_layer;
+uniform vec2 tex_res;
+uniform vec3 sun_direction;
+uniform vec4 sun_color;
+uniform vec4 water_color;
+
+vec4 fog_color = vec4(0.6745098039215687, 0.8392156862745098, 0.9490196078431372, 1.);
+
+void main(){
+    float fog_amount = pow(gl_FragCoord.z, gamma);
+    vec3 normal = normalize(vec3(
+        dot(texture2D(background_layer, uv + vec2(1., 0.) / tex_res).xy, vec2(1.)) 
+        - dot(texture2D(background_layer, uv - vec2(1., 0.) / tex_res).xy, vec2(1.)),
+        dot(texture2D(background_layer, uv + vec2(0., 1.) / tex_res).xy, vec2(1.)) 
+        - dot(texture2D(background_layer, uv - vec2(0., 1.) / tex_res).xy, vec2(1.)),
+        200. / 1024.
+    ));
+    float val = max(dot(normal, sun_direction), 0.);
+    float water_amount = texture2D(background_layer, uv).g;
+    gl_FragColor = sun_color * water_color;
+    gl_FragColor.rgb *= val;
     gl_FragColor *= 1. - fog_amount;
     gl_FragColor += fog_amount * fog_color;
+    // gl_FragColor = vec4(1., 0., 0., 1.);
+    gl_FragColor.a = min(0.5, water_amount * 10.);
+}
+
+`;
+
+test_fragment_shader_src = `
+precision mediump float;
+
+void main(){
+    gl_FragColor = vec4(1., 0., 0., 0.1);
 }
 
 `;
@@ -144,9 +210,11 @@ let M_camera = new Float32Array(16);
 // let sun_color = new Float32Array([0, 0, 0, 1]);
 let sun_color = new Float32Array([253 / 255, 251 / 255, 211 / 255, 1]);
 let terrain_color = new Float32Array([0, 154 / 255, 23 / 255, 1]);
+let water_color = new Float32Array([35 / 255, 137 / 255, 218 / 255, 0.9]);
 let sun_direction = new Float32Array([0.766044443118978, 0, 0.6427876096865393]);
 // let sun_direction = new Float32Array([0, 0, 1]);
 var rot_horizontal = 0;
+var frame_i = 0;
 const texture_res = 1024;
 const fps = 60;
 
@@ -207,6 +275,7 @@ function setup_gl(canvas){
     width = canvas.width;
     height = canvas.height;
     let rect = canvas.getBoundingClientRect();
+    canvas.oncontextmenu = function(e) { e.preventDefault(); e.stopPropagation(); }
     offset_x = rect.left;
     offset_y = rect.top;
     gl = canvas.getContext('webgl');
@@ -220,6 +289,11 @@ function setup_gl(canvas){
     gl.enable(gl.BLEND);
     gl.blendEquation(gl.FUNC_ADD);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    // gl.blendFunc(gl.DST_ALPHA, gl.ONE_MINUS_DST_ALPHA);
+    // gl.blendFunc(gl.ONE_MINUS_DST_ALPHA, gl.DST_ALPHA);
+    // gl.blendFunc(gl.ONE_MINU, gl.ONE_MINUS);
+    
+    
 }
 
 function compile_shader(source, type){
@@ -257,7 +331,7 @@ function create_buffer(data, type, draw_type){
     return buffer;
 }
 
-function create_texture(active_texture, color=[0, 0, 0, 255], width, height){
+function create_texture(active_texture, color=[0, 0, 0, 1.0], width, height){
     texture = gl.createTexture();
     gl.activeTexture(gl.TEXTURE0 + active_texture);
     gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -267,9 +341,9 @@ function create_texture(active_texture, color=[0, 0, 0, 255], width, height){
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     if (color != null){
         // color = new Uint8Array(Array(width * height).fill(color).flat());
-        color = new Float32Array(Array(width * height).fill([0., 1., 1.]).flat());
+        color = new Float32Array(Array(width * height).fill(color).flat());
     }
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.FLOAT, null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.FLOAT, color);
     return texture;
 }
 
@@ -294,6 +368,8 @@ function set_uniforms(program){
     gl.uniform4fv(gl.getUniformLocation(program, 'terrain_color'), terrain_color);
     gl.uniform4fv(gl.getUniformLocation(program, 'sun_color'), sun_color);
     gl.uniform3fv(gl.getUniformLocation(program, 'sun_direction'), sun_direction);
+    gl.uniform4fv(gl.getUniformLocation(program, 'water_color'), water_color);
+    gl.uniform1i(gl.getUniformLocation(program, 'frame_i'), frame_i);
 }
 
 function add_layer(
@@ -408,6 +484,23 @@ function init(){
     let camera_fragment_shader = compile_shader(camera_fragment_shader_src, gl.FRAGMENT_SHADER);
     let camera_program = link_program(camera_vertex_shader, camera_fragment_shader);
 
+    let water_vertex_shader = compile_shader(water_vertex_shader_src, gl.VERTEX_SHADER);
+    let water_fragment_shader = compile_shader(water_fragment_shader_src, gl.FRAGMENT_SHADER);
+    let water_program = link_program(water_vertex_shader, water_fragment_shader);
+
+    let test_verts = [
+        [-0.5, -0.5],
+        [0.5, -0.5],
+        [0, 0.5],
+    ];
+    let test_tris = [
+        [0, 1, 2],
+    ];
+    let test_vert_buffer = create_buffer(new Float32Array(test_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+    let test_tri_buffer = create_buffer(new Uint16Array(test_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
+    let test_fragment_shader = compile_shader(test_fragment_shader_src, gl.FRAGMENT_SHADER);
+    let test_program = link_program(simple_vertex_shader, test_fragment_shader);
+
     add_layer(
         'background_layer', 
         background_program,
@@ -438,10 +531,30 @@ function init(){
         true
     );
 
+    add_layer(
+        'water_layer',
+        water_program,
+        camera_vert_buffer,
+        camera_tri_buffer,
+        camera_mesh.tris.length,
+        false
+    )
+
+    // add_layer(
+    //     'test_layer',
+    //     test_program,
+    //     test_vert_buffer,
+    //     test_tri_buffer,
+    //     test_tris.length,
+    //     false
+    // );
+
     mat4.perspective(M_perpective, glMatrix.toRadian(45), width / height, 0.1, 150.0);
     mat4.lookAt(M_lookat, [0, 0, 0], [1, 0, 0], [0, 0, 1]);
 
     let loop = function(){
+        document.getElementById('debug').innerText = `${V_position[0].toFixed(3)}, ${V_position[1].toFixed(3)}`
+
         mat4.rotate(M_proj, M_lookat, glMatrix.toRadian(-rot_pitch), [0, 1, 0]);
         mat4.rotate(M_proj, M_proj, glMatrix.toRadian(-rot_yaw), [0, 0, 1]);
         mat4.translate(M_proj, M_proj, [-V_position[0], -V_position[1], -camera_height]);
@@ -452,6 +565,7 @@ function init(){
         mat4.rotate(M_camera, M_camera, glMatrix.toRadian(rot_yaw), [0, 0, 1]);
         
         draw_layers();
+        frame_i++;
         setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
     }
     requestAnimationFrame(loop);
