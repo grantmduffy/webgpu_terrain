@@ -98,17 +98,24 @@ precision mediump float;
 varying vec2 uv;
 uniform sampler2D background_layer;
 uniform vec2 tex_res;
+uniform vec3 sun_direction;
+uniform vec4 sun_color;
+uniform vec4 terrain_color;
 
 vec4 fog_color = vec4(0.6745098039215687, 0.8392156862745098, 0.9490196078431372, 1.);
 
 void main(){
     float fog_amount = pow(gl_FragCoord.z, gamma);
-    float val = texture2D(background_layer, uv + 1. / tex_res).x - texture2D(background_layer, uv - 1. / tex_res).x + 0.5;
-    gl_FragColor = vec4(val, val, val, 1.);
+    vec3 normal = normalize(vec3(
+        texture2D(background_layer, uv + vec2(1., 0.) / tex_res).x - texture2D(background_layer, uv - vec2(1., 0.) / tex_res).x,
+        texture2D(background_layer, uv + vec2(0., 1.) / tex_res).x - texture2D(background_layer, uv - vec2(0., 1.) / tex_res).x,
+        200. / 1024.
+    ));
+    float val = max(dot(normal, sun_direction), 0.);
+    gl_FragColor = sun_color * terrain_color;
+    gl_FragColor.rgb *= val;
     gl_FragColor *= 1. - fog_amount;
     gl_FragColor += fog_amount * fog_color;
-    // vec4 tex_value = texture2D(background_layer, uv);
-    // gl_FragColor = vec4(0., fog_amount, 1., 1.);
 }
 
 `;
@@ -134,6 +141,11 @@ let M_lookat = new Float32Array(16);
 var M_proj = new Float32Array(16);
 let M_perpective = new Float32Array(16);
 let M_camera = new Float32Array(16);
+// let sun_color = new Float32Array([0, 0, 0, 1]);
+let sun_color = new Float32Array([253 / 255, 251 / 255, 211 / 255, 1]);
+let terrain_color = new Float32Array([0, 154 / 255, 23 / 255, 1]);
+let sun_direction = new Float32Array([0.766044443118978, 0, 0.6427876096865393]);
+// let sun_direction = new Float32Array([0, 0, 1]);
 var rot_horizontal = 0;
 const texture_res = 1024;
 const fps = 60;
@@ -279,6 +291,9 @@ function set_uniforms(program){
     gl.uniform1i(gl.getUniformLocation(program, 'buttons'), buttons);
     gl.uniformMatrix4fv(gl.getUniformLocation(program, 'M_proj'), gl.False, M_proj);
     gl.uniformMatrix4fv(gl.getUniformLocation(program, 'M_camera'), gl.False, M_camera);
+    gl.uniform4fv(gl.getUniformLocation(program, 'terrain_color'), terrain_color);
+    gl.uniform4fv(gl.getUniformLocation(program, 'sun_color'), sun_color);
+    gl.uniform3fv(gl.getUniformLocation(program, 'sun_direction'), sun_direction);
 }
 
 function add_layer(
@@ -423,7 +438,7 @@ function init(){
         true
     );
 
-    mat4.perspective(M_perpective, glMatrix.toRadian(45), width / height, 0.1, 100.0);
+    mat4.perspective(M_perpective, glMatrix.toRadian(45), width / height, 0.1, 150.0);
     mat4.lookAt(M_lookat, [0, 0, 0], [1, 0, 0], [0, 0, 1]);
 
     let loop = function(){
