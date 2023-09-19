@@ -72,17 +72,17 @@ void main(){
 }
 `;
 
-let radial_vertex_shader_src = `
+let camera_vertex_shader_src = `
 precision mediump float;
 
 attribute vec2 vert_pos;
-uniform mat4 M_radial;
+uniform mat4 M_camera;
 uniform mat4 M_proj;
 uniform sampler2D background_layer;
 varying vec2 uv;
 
 void main(){
-    vec4 world_coords = M_radial * vec4(vert_pos, 0., 1.);
+    vec4 world_coords = M_camera * vec4(vert_pos, 0., 1.);
     uv = (world_coords.xy / 100. + 1.) / 2.;
     float elevation = texture2D(background_layer, uv).x * 1.;
     world_coords.z = elevation;
@@ -90,7 +90,7 @@ void main(){
 }
 `;
 
-let radial_fragment_shader_src = `
+let camera_fragment_shader_src = `
 precision mediump float;
 
 varying vec2 uv;
@@ -124,9 +124,9 @@ let V_direction = new Float32Array(2);
 let M_lookat = new Float32Array(16);
 var M_proj = new Float32Array(16);
 let M_perpective = new Float32Array(16);
-let M_radial = new Float32Array(16);
+let M_camera = new Float32Array(16);
 var rot_horizontal = 0;
-const texture_res = 256;
+const texture_res = 1024;
 const fps = 60;
 
 var layers = [];
@@ -268,7 +268,7 @@ function set_uniforms(program){
     gl.uniform2f(gl.getUniformLocation(program, 'mouse'), mouse_x, mouse_y);
     gl.uniform1i(gl.getUniformLocation(program, 'buttons'), buttons);
     gl.uniformMatrix4fv(gl.getUniformLocation(program, 'M_proj'), gl.False, M_proj);
-    gl.uniformMatrix4fv(gl.getUniformLocation(program, 'M_radial'), gl.False, M_radial);
+    gl.uniformMatrix4fv(gl.getUniformLocation(program, 'M_camera'), gl.False, M_camera);
 }
 
 function add_layer(
@@ -377,11 +377,11 @@ function init(){
     let texture1 = create_texture(2, [0., 0., 0., 1.], texture_res, texture_res);
     let background_fbo = create_fbo(texture1, texture_res, texture_res);
 
-    let radial_vert_buffer = create_buffer(new Float32Array(radial_mesh.verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
-    let radial_tri_buffer = create_buffer(new Uint16Array(radial_mesh.tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
-    let radial_vertex_shader = compile_shader(radial_vertex_shader_src, gl.VERTEX_SHADER);
-    let radial_fragment_shader = compile_shader(radial_fragment_shader_src, gl.FRAGMENT_SHADER);
-    let radial_program = link_program(radial_vertex_shader, radial_fragment_shader);
+    let camera_vert_buffer = create_buffer(new Float32Array(camera_mesh.verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+    let camera_tri_buffer = create_buffer(new Uint16Array(camera_mesh.tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
+    let camera_vertex_shader = compile_shader(camera_vertex_shader_src, gl.VERTEX_SHADER);
+    let camera_fragment_shader = compile_shader(camera_fragment_shader_src, gl.FRAGMENT_SHADER);
+    let camera_program = link_program(camera_vertex_shader, camera_fragment_shader);
 
     add_layer(
         'background_layer', 
@@ -405,11 +405,11 @@ function init(){
     );
 
     add_layer(
-        'radial_layer',
-        radial_program,
-        radial_vert_buffer,
-        radial_tri_buffer,
-        radial_mesh.tris.length,
+        'camera_layer',
+        camera_program,
+        camera_vert_buffer,
+        camera_tri_buffer,
+        camera_mesh.tris.length,
         false
     );
 
@@ -422,9 +422,9 @@ function init(){
         mat4.translate(M_proj, M_proj, [-V_position[0], -V_position[1], -camera_height]);
         mat4.multiply(M_proj, M_perpective, M_proj);
 
-        mat4.identity(M_radial);
-        mat4.translate(M_radial, M_radial, [V_position[0], V_position[1], 0]);
-        mat4.rotate(M_radial, M_radial, glMatrix.toRadian(rot_yaw), [0, 0, 1]);
+        mat4.identity(M_camera);
+        mat4.translate(M_camera, M_camera, [V_position[0], V_position[1], 0]);
+        mat4.rotate(M_camera, M_camera, glMatrix.toRadian(rot_yaw), [0, 0, 1]);
         
         draw_layers();
         setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
