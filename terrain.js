@@ -1,8 +1,16 @@
 // python -m http.server 8888
 
-let simple_vertex_shader_src = `
+let global_glsl = `
 precision mediump float;
 
+vec4 sample(sampler2D tex, vec2 uv){
+    // return texture2D(tex, clamp(uv, 0., 1.));
+    return texture2D(tex, uv);
+}
+
+`;
+
+let simple_vertex_shader_src = `
 attribute vec2 vert_pos;
 varying vec2 xy;
 
@@ -13,8 +21,6 @@ void main(){
 `;
 
 let background_fragment_shader_src = `
-precision mediump float;
-
 #define cursor 100.
 
 uniform vec2 resolution;
@@ -24,9 +30,29 @@ uniform int buttons;
 uniform sampler2D background_layer;
 uniform mat4 M_proj;
 uniform int frame_i;
+float t_filt = 0.5;
 
 void main(){
-    gl_FragColor = texture2D(background_layer, gl_FragCoord.xy / tex_res);
+    vec2 uv = gl_FragCoord.xy / tex_res;
+    vec4 b = sample(background_layer, uv);
+    vec4 b_n = sample(background_layer, uv + vec2(0., 1.) / tex_res);
+    vec4 b_s = sample(background_layer, uv + vec2(0., -1.) / tex_res);
+    vec4 b_e = sample(background_layer, uv + vec2(1., 0.) / tex_res);
+    vec4 b_w = sample(background_layer, uv + vec2(-1., 0.) / tex_res);
+    b.y += .3 * (
+            clamp(b_n.x + b_n.y - b.x - b.y, -b.y / 4., b_n.y / 4.)
+        +  clamp(b_s.x + b_s.y - b.x - b.y, -b.y / 4., b_s.y / 4.)
+        +  clamp(b_e.x + b_e.y - b.x - b.y, -b.y / 4., b_e.y / 4.)
+        +  clamp(b_w.x + b_w.y - b.x - b.y, -b.y / 4., b_w.y / 4.)
+        );
+    // b.y = 0.6 * b.y 
+    //     + 0.1 * b_n.y 
+    //     + 0.1 * b_s.y 
+    //     + 0.1 * b_e.y 
+    //     + 0.1 * b_w.y;
+    gl_FragColor = b;
+                    
+
     vec2 xy = (2. * gl_FragCoord.xy / tex_res - 1.) * 100.;
     vec4 xyz = M_proj * vec4(xy, 0., 1.);
     xyz /= xyz.w;
@@ -38,15 +64,10 @@ void main(){
     if (len < cursor && buttons == 2){
         gl_FragColor.g += 0.01 * (1. -  x * x * (3. - 2. * x));
     }
-    // if (frame_i == 0){
-    //     gl_FragColor = vec4(0., 0., 0., 1.);
-    // }
 }
 `;
 
 let projection_vertex_shader_src = `
-precision mediump float;
-
 uniform mat4 M_proj;
 attribute vec2 vert_pos;
 varying vec2 uv;
@@ -60,22 +81,18 @@ void main(){
 
 
 let display_fragment_shader_src = `
-precision mediump float;
-
 uniform vec2 mouse;
 uniform int buttons;
 uniform sampler2D background_layer;
 varying vec2 uv;
 
 void main(){
-    gl_FragColor = texture2D(background_layer, uv);
+    gl_FragColor = sample(background_layer, uv);
     // gl_FragColor.a = 0.5;
 }
 `;
 
 let camera_vertex_shader_src = `
-precision mediump float;
-
 attribute vec2 vert_pos;
 uniform mat4 M_camera;
 uniform mat4 M_proj;
@@ -85,15 +102,13 @@ varying vec2 uv;
 void main(){
     vec4 world_coords = M_camera * vec4(vert_pos, 0., 1.);
     uv = (world_coords.xy / 100. + 1.) / 2.;
-    float elevation = texture2D(background_layer, uv).x * 1.;
+    float elevation = sample(background_layer, uv).x * 1.;
     world_coords.z = elevation;
     gl_Position = M_proj * world_coords;
 }
 `;
 
 let camera_fragment_shader_src = `
-precision mediump float;
-
 #define gamma 500.
 
 varying vec2 uv;
@@ -108,23 +123,21 @@ vec4 fog_color = vec4(0.6745098039215687, 0.8392156862745098, 0.9490196078431372
 void main(){
     float fog_amount = pow(gl_FragCoord.z, gamma);
     vec3 normal = normalize(vec3(
-        texture2D(background_layer, uv + vec2(1., 0.) / tex_res).x - texture2D(background_layer, uv - vec2(1., 0.) / tex_res).x,
-        texture2D(background_layer, uv + vec2(0., 1.) / tex_res).x - texture2D(background_layer, uv - vec2(0., 1.) / tex_res).x,
-        200. / 1024.
+        sample(background_layer, uv + vec2(1., 0.) / tex_res).x - sample(background_layer, uv - vec2(1., 0.) / tex_res).x,
+        sample(background_layer, uv + vec2(0., 1.) / tex_res).x - sample(background_layer, uv - vec2(0., 1.) / tex_res).x,
+        200. / 512.
     ));
     float val = max(dot(normal, sun_direction), 0.);
     gl_FragColor = sun_color * terrain_color;
     gl_FragColor.rgb *= val;
-    // gl_FragColor *= 1. - fog_amount;
-    // gl_FragColor += fog_amount * fog_color;
+    gl_FragColor *= 1. - fog_amount;
+    gl_FragColor += fog_amount * fog_color;
     gl_FragColor.a = 1.;
 }
 
 `;
 
 let water_vertex_shader_src = `
-precision mediump float;
-
 attribute vec2 vert_pos;
 uniform mat4 M_camera;
 uniform mat4 M_proj;
@@ -134,17 +147,15 @@ varying vec2 uv;
 void main(){
     vec4 world_coords = M_camera * vec4(vert_pos, 0., 1.);
     uv = (world_coords.xy / 100. + 1.) / 2.;
-    float elevation = dot(texture2D(background_layer, uv).xy, vec2(1.));
-    // float elevation = texture2D(background_layer, uv).y;
-    // float elevation = texture2D(background_layer, uv).y;
+    float elevation = dot(sample(background_layer, uv).xy, vec2(1.));
+    // float elevation = sample(background_layer, uv).y;
+    // float elevation = sample(background_layer, uv).y;
     world_coords.z = elevation;
     gl_Position = M_proj * world_coords;
 }
 `;
 
 let water_fragment_shader_src = `
-precision mediump float;
-
 #define gamma 500.
 
 varying vec2 uv;
@@ -157,29 +168,32 @@ uniform vec4 water_color;
 vec4 fog_color = vec4(0.6745098039215687, 0.8392156862745098, 0.9490196078431372, 1.);
 
 void main(){
-    float fog_amount = pow(gl_FragCoord.z, gamma);
+    // float fog_amount = pow(gl_FragCoord.z, gamma);
+    // vec4 b = sample(background_layer, uv);
+    vec4 b_n = sample(background_layer, uv + vec2(0., 1.) / tex_res);
+    vec4 b_s = sample(background_layer, uv + vec2(0., -1.) / tex_res);
+    vec4 b_e = sample(background_layer, uv + vec2(1., 0.) / tex_res);
+    vec4 b_w = sample(background_layer, uv + vec2(-1., 0.) / tex_res);
+
     vec3 normal = normalize(vec3(
-        dot(texture2D(background_layer, uv + vec2(1., 0.) / tex_res).xy, vec2(1.)) 
-        - dot(texture2D(background_layer, uv - vec2(1., 0.) / tex_res).xy, vec2(1.)),
-        dot(texture2D(background_layer, uv + vec2(0., 1.) / tex_res).xy, vec2(1.)) 
-        - dot(texture2D(background_layer, uv - vec2(0., 1.) / tex_res).xy, vec2(1.)),
-        200. / 1024.
+        dot(b_e.xy, vec2(1.)) 
+        - dot(b_w.xy, vec2(1.)),
+        dot(b_n.xy, vec2(1.)) 
+        - dot(b_s.xy, vec2(1.)),
+        200. / 512.
     ));
     float val = max(dot(normal, sun_direction), 0.);
-    float water_amount = texture2D(background_layer, uv).g;
+    float water_amount = sample(background_layer, uv).g;
     gl_FragColor = sun_color * water_color;
     gl_FragColor.rgb *= val;
-    gl_FragColor *= 1. - fog_amount;
-    gl_FragColor += fog_amount * fog_color;
-    // gl_FragColor = vec4(1., 0., 0., 1.);
-    gl_FragColor.a = min(0.5, water_amount * 10.);
+    // gl_FragColor *= 1. - fog_amount;
+    // gl_FragColor += fog_amount * fog_color;
+    gl_FragColor.a = min(0.5, water_amount * 1.);
 }
 
 `;
 
 test_fragment_shader_src = `
-precision mediump float;
-
 void main(){
     gl_FragColor = vec4(1., 0., 0., 0.1);
 }
@@ -215,7 +229,7 @@ let sun_direction = new Float32Array([0.766044443118978, 0, 0.6427876096865393])
 // let sun_direction = new Float32Array([0, 0, 1]);
 var rot_horizontal = 0;
 var frame_i = 0;
-const texture_res = 1024;
+const texture_res = 512;
 const fps = 60;
 
 var layers = [];
@@ -289,16 +303,11 @@ function setup_gl(canvas){
     gl.enable(gl.BLEND);
     gl.blendEquation(gl.FUNC_ADD);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    // gl.blendFunc(gl.DST_ALPHA, gl.ONE_MINUS_DST_ALPHA);
-    // gl.blendFunc(gl.ONE_MINUS_DST_ALPHA, gl.DST_ALPHA);
-    // gl.blendFunc(gl.ONE_MINU, gl.ONE_MINUS);
-    
-    
 }
 
 function compile_shader(source, type){
     let shader = gl.createShader(type);
-    gl.shaderSource(shader, source);
+    gl.shaderSource(shader, global_glsl + source);
     gl.compileShader(shader);
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)){
         console.error('Failed to compile vertex shader:', gl.getShaderInfoLog(shader));
@@ -337,8 +346,8 @@ function create_texture(active_texture, color=[0, 0, 0, 1.0], width, height){
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT);
     if (color != null){
         // color = new Uint8Array(Array(width * height).fill(color).flat());
         color = new Float32Array(Array(width * height).fill(color).flat());
@@ -553,7 +562,7 @@ function init(){
     mat4.lookAt(M_lookat, [0, 0, 0], [1, 0, 0], [0, 0, 1]);
 
     let loop = function(){
-        document.getElementById('debug').innerText = `${V_position[0].toFixed(3)}, ${V_position[1].toFixed(3)}`
+        // document.getElementById('debug').innerText = `${V_position[0].toFixed(3)}, ${V_position[1].toFixed(3)}`
 
         mat4.rotate(M_proj, M_lookat, glMatrix.toRadian(-rot_pitch), [0, 1, 0]);
         mat4.rotate(M_proj, M_proj, glMatrix.toRadian(-rot_yaw), [0, 0, 1]);
@@ -566,7 +575,8 @@ function init(){
         
         draw_layers();
         frame_i++;
-        setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
+        // setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
+        requestAnimationFrame(loop);
     }
     requestAnimationFrame(loop);
 
