@@ -39,17 +39,12 @@ void main(){
     vec4 b_s = sample(background_layer, uv + vec2(0., -1.) / tex_res);
     vec4 b_e = sample(background_layer, uv + vec2(1., 0.) / tex_res);
     vec4 b_w = sample(background_layer, uv + vec2(-1., 0.) / tex_res);
-    b.y += .3 * (
+    b.y += .2 * (
             clamp(b_n.x + b_n.y - b.x - b.y, -b.y / 4., b_n.y / 4.)
         +  clamp(b_s.x + b_s.y - b.x - b.y, -b.y / 4., b_s.y / 4.)
         +  clamp(b_e.x + b_e.y - b.x - b.y, -b.y / 4., b_e.y / 4.)
         +  clamp(b_w.x + b_w.y - b.x - b.y, -b.y / 4., b_w.y / 4.)
         );
-    // b.y = 0.6 * b.y 
-    //     + 0.1 * b_n.y 
-    //     + 0.1 * b_s.y 
-    //     + 0.1 * b_e.y 
-    //     + 0.1 * b_w.y;
     gl_FragColor = b;
                     
 
@@ -148,8 +143,6 @@ void main(){
     vec4 world_coords = M_camera * vec4(vert_pos, 0., 1.);
     uv = (world_coords.xy / 100. + 1.) / 2.;
     float elevation = dot(sample(background_layer, uv).xy, vec2(1.));
-    // float elevation = sample(background_layer, uv).y;
-    // float elevation = sample(background_layer, uv).y;
     world_coords.z = elevation;
     gl_Position = M_proj * world_coords;
 }
@@ -164,6 +157,7 @@ uniform vec2 tex_res;
 uniform vec3 sun_direction;
 uniform vec4 sun_color;
 uniform vec4 water_color;
+uniform mat4 M_proj;
 
 vec4 fog_color = vec4(0.6745098039215687, 0.8392156862745098, 0.9490196078431372, 1.);
 
@@ -182,6 +176,7 @@ void main(){
         - dot(b_s.xy, vec2(1.)),
         200. / 512.
     ));
+    vec4 screen_normal = M_proj * vec4(normal, 1.);
     float val = max(dot(normal, sun_direction), 0.);
     float water_amount = sample(background_layer, uv).g;
     gl_FragColor = sun_color * water_color;
@@ -189,6 +184,7 @@ void main(){
     // gl_FragColor *= 1. - fog_amount;
     // gl_FragColor += fog_amount * fog_color;
     gl_FragColor.a = min(0.5, water_amount * 1.);
+    // gl_FragColor = vec4(dot(screen_normal.xyz, vec3(1., 0., 0.)), 0., 0., 1.);
 }
 
 `;
