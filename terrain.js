@@ -124,7 +124,7 @@ void main(){
     ));
     float val = max(dot(normal, sun_direction), 0.);
     gl_FragColor = sun_color * terrain_color;
-    gl_FragColor.rgb *= val;
+    gl_FragColor.rgb *= clamp(val, 0.1, 1.0);
     gl_FragColor *= 1. - fog_amount;
     gl_FragColor += fog_amount * fog_color;
     gl_FragColor.a = 1.;
@@ -138,10 +138,12 @@ uniform mat4 M_camera;
 uniform mat4 M_proj;
 uniform sampler2D background_layer;
 varying vec2 uv;
+varying vec3 xyz;
 
 void main(){
     vec4 world_coords = M_camera * vec4(vert_pos, 0., 1.);
     uv = (world_coords.xy / 100. + 1.) / 2.;
+    xyz = world_coords.xyz;
     float elevation = dot(sample(background_layer, uv).xy, vec2(1.));
     world_coords.z = elevation;
     gl_Position = M_proj * world_coords;
@@ -158,6 +160,8 @@ uniform vec3 sun_direction;
 uniform vec4 sun_color;
 uniform vec4 water_color;
 uniform mat4 M_proj;
+varying vec3 xyz;
+uniform vec3 camera_position;
 
 vec4 fog_color = vec4(0.6745098039215687, 0.8392156862745098, 0.9490196078431372, 1.);
 
@@ -176,15 +180,17 @@ void main(){
         - dot(b_s.xy, vec2(1.)),
         200. / 512.
     ));
-    vec4 screen_normal = M_proj * vec4(normal, 1.);
-    float val = max(dot(normal, sun_direction), 0.);
+    float reflection_amount = 1. - dot(normalize(camera_position - xyz), normal);
+    gl_FragColor = reflection_amount * fog_color + (1. - reflection_amount) * water_color;
     float water_amount = sample(background_layer, uv).g;
-    gl_FragColor = sun_color * water_color;
-    gl_FragColor.rgb *= val;
-    // gl_FragColor *= 1. - fog_amount;
-    // gl_FragColor += fog_amount * fog_color;
     gl_FragColor.a = min(0.5, water_amount * 1.);
-    // gl_FragColor = vec4(dot(screen_normal.xyz, vec3(1., 0., 0.)), 0., 0., 1.);
+
+
+
+    // float val = max(dot(normal, sun_direction), 0.);
+    // gl_FragColor = sun_color * water_color;
+    // gl_FragColor.rgb *= val;
+    // gl_FragColor = vec4(1. - dot(normalize(camera_position - xyz), normal));
 }
 
 `;
@@ -210,7 +216,7 @@ var rot_yaw = 0;
 const speed = 2;
 const rot_speed = 5;
 const vert_speed = 0.5;
-let V_position = new Float32Array(2);
+let camera_position = new Float32Array(2);
 var camera_height = 3.0;
 let V_direction = new Float32Array(2);
 let M_lookat = new Float32Array(16);
@@ -220,7 +226,7 @@ let M_camera = new Float32Array(16);
 // let sun_color = new Float32Array([0, 0, 0, 1]);
 let sun_color = new Float32Array([253 / 255, 251 / 255, 211 / 255, 1]);
 let terrain_color = new Float32Array([0, 154 / 255, 23 / 255, 1]);
-let water_color = new Float32Array([35 / 255, 137 / 255, 218 / 255, 0.9]);
+let water_color = new Float32Array([25 / 255, 90 / 255, 191 / 255, 0.7]);
 let sun_direction = new Float32Array([0.766044443118978, 0, 0.6427876096865393]);
 // let sun_direction = new Float32Array([0, 0, 1]);
 var rot_horizontal = 0;
@@ -252,20 +258,20 @@ function on_keydown(event){
             rot_pitch += rot_speed;
             break;
         case 65:  // A
-            V_position[0] -= speed * v[1];
-            V_position[1] += speed * v[0];
+            camera_position[0] -= speed * v[1];
+            camera_position[1] += speed * v[0];
             break;
         case 68:  // D
-            V_position[0] += speed * v[1];
-            V_position[1] -= speed * v[0];
+            camera_position[0] += speed * v[1];
+            camera_position[1] -= speed * v[0];
             break;
         case 87:  // W
-            V_position[0] += speed * v[0];
-            V_position[1] += speed * v[1];
+            camera_position[0] += speed * v[0];
+            camera_position[1] += speed * v[1];
             break;
         case 83:  // S
-            V_position[0] -= speed * v[0];
-            V_position[1] -= speed * v[1];
+            camera_position[0] -= speed * v[0];
+            camera_position[1] -= speed * v[1];
             break;
         case 69:
             camera_height += vert_speed;
@@ -375,6 +381,7 @@ function set_uniforms(program){
     gl.uniform3fv(gl.getUniformLocation(program, 'sun_direction'), sun_direction);
     gl.uniform4fv(gl.getUniformLocation(program, 'water_color'), water_color);
     gl.uniform1i(gl.getUniformLocation(program, 'frame_i'), frame_i);
+    gl.uniform3f(gl.getUniformLocation(program, 'camera_position'), camera_position[0], camera_position[1], camera_height);
 }
 
 function add_layer(
@@ -562,11 +569,11 @@ function init(){
 
         mat4.rotate(M_proj, M_lookat, glMatrix.toRadian(-rot_pitch), [0, 1, 0]);
         mat4.rotate(M_proj, M_proj, glMatrix.toRadian(-rot_yaw), [0, 0, 1]);
-        mat4.translate(M_proj, M_proj, [-V_position[0], -V_position[1], -camera_height]);
+        mat4.translate(M_proj, M_proj, [-camera_position[0], -camera_position[1], -camera_height]);
         mat4.multiply(M_proj, M_perpective, M_proj);
 
         mat4.identity(M_camera);
-        mat4.translate(M_camera, M_camera, [V_position[0], V_position[1], 0]);
+        mat4.translate(M_camera, M_camera, [camera_position[0], camera_position[1], 0]);
         mat4.rotate(M_camera, M_camera, glMatrix.toRadian(rot_yaw), [0, 0, 1]);
         
         draw_layers();
