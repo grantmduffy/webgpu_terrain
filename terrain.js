@@ -22,6 +22,9 @@ void main(){
 
 let background_fragment_shader_src = `
 #define cursor 100.
+#define K_sat 0.001
+#define K_uptake 0.01
+#define K_max_s_flow 0.0001
 
 uniform vec2 resolution;
 uniform vec2 tex_res;
@@ -39,6 +42,8 @@ void main(){
     vec4 b_s = sample(background_layer, uv + vec2(0., -1.) / tex_res);
     vec4 b_e = sample(background_layer, uv + vec2(1., 0.) / tex_res);
     vec4 b_w = sample(background_layer, uv + vec2(-1., 0.) / tex_res);
+
+    // water flow
     b.y += .2 * (
             clamp(b_n.x + b_n.y - b.x - b.y, -b.y / 4., b_n.y / 4.)
         +  clamp(b_s.x + b_s.y - b.x - b.y, -b.y / 4., b_s.y / 4.)
@@ -46,7 +51,25 @@ void main(){
         +  clamp(b_w.x + b_w.y - b.x - b.y, -b.y / 4., b_w.y / 4.)
         );
     gl_FragColor = b;
-                    
+
+    // water velocity
+    vec2 vel = vec2(clamp(b_s.x + b_s.y - b.x - b.y, -b.y / 4., b_s.y / 4.)
+                  - clamp(b_n.x + b_n.y - b.x - b.y, -b.y / 4., b_n.y / 4.),
+                    clamp(b_w.x + b_w.y - b.x - b.y, -b.y / 4., b_w.y / 4.)
+                  - clamp(b_e.x + b_e.y - b.x - b.y, -b.y / 4., b_e.y / 4.));
+
+    // convect sediment
+    gl_FragColor.z += vel.x * (b_w.z - b_e.z) + vel.y * (b_s.z - b_n.z);
+    
+    float vel_mag = length(vel);
+    // float uptake = min(
+    //     K_uptake * vel_mag, 
+    //     K_sat * vel_mag - b.z
+    // );
+    // gl_FragColor.z += uptake;
+    // gl_FragColor.x -= clamp(uptake, -K_max_s_flow, K_max_s_flow);
+    // gl_FragColor.x -= uptake;
+    gl_FragColor.x -= K_uptake * vel_mag * b.y;
 
     vec2 xy = (2. * gl_FragCoord.xy / tex_res - 1.) * 100.;
     vec4 xyz = M_proj * vec4(xy, 0., 1.);
@@ -151,8 +174,6 @@ void main(){
 `;
 
 let water_fragment_shader_src = `
-#define gamma 500.
-
 varying vec2 uv;
 uniform sampler2D background_layer;
 uniform vec2 tex_res;
@@ -166,8 +187,7 @@ uniform vec3 camera_position;
 vec4 fog_color = vec4(0.6745098039215687, 0.8392156862745098, 0.9490196078431372, 1.);
 
 void main(){
-    // float fog_amount = pow(gl_FragCoord.z, gamma);
-    // vec4 b = sample(background_layer, uv);
+    vec4 b = sample(background_layer, uv);
     vec4 b_n = sample(background_layer, uv + vec2(0., 1.) / tex_res);
     vec4 b_s = sample(background_layer, uv + vec2(0., -1.) / tex_res);
     vec4 b_e = sample(background_layer, uv + vec2(1., 0.) / tex_res);
@@ -183,14 +203,8 @@ void main(){
     float reflection_amount = 1. - dot(normalize(camera_position - xyz), normal);
     gl_FragColor = reflection_amount * fog_color + (1. - reflection_amount) * water_color;
     float water_amount = sample(background_layer, uv).g;
+    // gl_FragColor = vec4(0., 0., b.z * .1, 1.);
     gl_FragColor.a = min(0.5, water_amount * 1.);
-
-
-
-    // float val = max(dot(normal, sun_direction), 0.);
-    // gl_FragColor = sun_color * water_color;
-    // gl_FragColor.rgb *= val;
-    // gl_FragColor = vec4(1. - dot(normalize(camera_position - xyz), normal));
 }
 
 `;
@@ -226,7 +240,7 @@ let M_camera = new Float32Array(16);
 // let sun_color = new Float32Array([0, 0, 0, 1]);
 let sun_color = new Float32Array([253 / 255, 251 / 255, 211 / 255, 1]);
 let terrain_color = new Float32Array([0, 154 / 255, 23 / 255, 1]);
-let water_color = new Float32Array([25 / 255, 90 / 255, 191 / 255, 0.7]);
+let water_color = new Float32Array([0 / 255, 80 / 255, 150 / 255, 0.7]);
 let sun_direction = new Float32Array([0.766044443118978, 0, 0.6427876096865393]);
 // let sun_direction = new Float32Array([0, 0, 1]);
 var rot_horizontal = 0;
