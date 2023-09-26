@@ -22,9 +22,9 @@ void main(){
 
 let background_fragment_shader_src = `
 #define cursor 100.
-#define K_sat 0.001
-#define K_uptake 0.01
-#define K_max_s_flow 0.0001
+#define K_sat 0.00001
+#define K_uptake 0.000001
+#define K_max_s_flow 0.0
 
 uniform vec2 resolution;
 uniform vec2 tex_res;
@@ -57,19 +57,22 @@ void main(){
                   - clamp(b_n.x + b_n.y - b.x - b.y, -b.y / 4., b_n.y / 4.),
                     clamp(b_w.x + b_w.y - b.x - b.y, -b.y / 4., b_w.y / 4.)
                   - clamp(b_e.x + b_e.y - b.x - b.y, -b.y / 4., b_e.y / 4.));
+    if (b.y > 0.){
+        vel /= b.y;
+    }
 
     // convect sediment
     gl_FragColor.z += vel.x * (b_w.z - b_e.z) + vel.y * (b_s.z - b_n.z);
     
     float vel_mag = length(vel);
-    // float uptake = min(
-    //     K_uptake * vel_mag, 
-    //     K_sat * vel_mag - b.z
-    // );
-    // gl_FragColor.z += uptake;
+    float uptake = min(
+        K_uptake * vel_mag, 
+        K_sat * vel_mag - b.z
+    );
+    gl_FragColor.z += uptake;
     // gl_FragColor.x -= clamp(uptake, -K_max_s_flow, K_max_s_flow);
     // gl_FragColor.x -= uptake;
-    gl_FragColor.x -= K_uptake * vel_mag * b.y;
+    // gl_FragColor.x -= K_uptake * vel_mag * b.y;
 
     vec2 xy = (2. * gl_FragCoord.xy / tex_res - 1.) * 100.;
     vec4 xyz = M_proj * vec4(xy, 0., 1.);
