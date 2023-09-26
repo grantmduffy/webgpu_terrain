@@ -2,6 +2,24 @@
 
 let global_glsl = `
 precision mediump float;
+#define cursor 100.
+#define K_sat 0.00001
+#define K_uptake 0.000001
+#define K_max_s_flow 0.0
+
+uniform vec2 resolution;
+uniform vec2 tex_res;
+uniform vec2 mouse;
+uniform int buttons;
+uniform sampler2D background_layer;
+uniform mat4 M_proj;
+uniform int frame_i;
+uniform mat4 M_camera;
+uniform vec3 sun_direction;
+uniform vec4 sun_color;
+uniform vec4 terrain_color;
+uniform vec4 water_color;
+uniform vec3 camera_position;
 
 vec4 sample(sampler2D tex, vec2 uv){
     // return texture2D(tex, clamp(uv, 0., 1.));
@@ -21,18 +39,6 @@ void main(){
 `;
 
 let background_fragment_shader_src = `
-#define cursor 100.
-#define K_sat 0.00001
-#define K_uptake 0.000001
-#define K_max_s_flow 0.0
-
-uniform vec2 resolution;
-uniform vec2 tex_res;
-uniform vec2 mouse;
-uniform int buttons;
-uniform sampler2D background_layer;
-uniform mat4 M_proj;
-uniform int frame_i;
 float t_filt = 0.5;
 
 void main(){
@@ -89,7 +95,6 @@ void main(){
 `;
 
 let projection_vertex_shader_src = `
-uniform mat4 M_proj;
 attribute vec2 vert_pos;
 varying vec2 uv;
 
@@ -102,9 +107,6 @@ void main(){
 
 
 let display_fragment_shader_src = `
-uniform vec2 mouse;
-uniform int buttons;
-uniform sampler2D background_layer;
 varying vec2 uv;
 
 void main(){
@@ -115,9 +117,6 @@ void main(){
 
 let camera_vertex_shader_src = `
 attribute vec2 vert_pos;
-uniform mat4 M_camera;
-uniform mat4 M_proj;
-uniform sampler2D background_layer;
 varying vec2 uv;
 
 void main(){
@@ -133,12 +132,6 @@ let camera_fragment_shader_src = `
 #define gamma 500.
 
 varying vec2 uv;
-uniform sampler2D background_layer;
-uniform vec2 tex_res;
-uniform vec3 sun_direction;
-uniform vec4 sun_color;
-uniform vec4 terrain_color;
-
 vec4 fog_color = vec4(0.6745098039215687, 0.8392156862745098, 0.9490196078431372, 1.);
 
 void main(){
@@ -160,9 +153,6 @@ void main(){
 
 let water_vertex_shader_src = `
 attribute vec2 vert_pos;
-uniform mat4 M_camera;
-uniform mat4 M_proj;
-uniform sampler2D background_layer;
 varying vec2 uv;
 varying vec3 xyz;
 
@@ -178,14 +168,7 @@ void main(){
 
 let water_fragment_shader_src = `
 varying vec2 uv;
-uniform sampler2D background_layer;
-uniform vec2 tex_res;
-uniform vec3 sun_direction;
-uniform vec4 sun_color;
-uniform vec4 water_color;
-uniform mat4 M_proj;
 varying vec3 xyz;
-uniform vec3 camera_position;
 
 vec4 fog_color = vec4(0.6745098039215687, 0.8392156862745098, 0.9490196078431372, 1.);
 
