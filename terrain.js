@@ -8,10 +8,12 @@ precision mediump float;
 #define cursor 100.
 #define fog_gamma 500.
 #define min_water_depth 0.01
-#define K_sat 0.01
+#define K_sat 0.005
 #define K_uptake 0.0003
 #define K_sediment_convection 0.001
 #define cursor_water_level 0.002
+#define cursor_elev_level 0.1
+#define rain 0.0001
 
 uniform vec2 resolution;
 uniform vec2 tex_res;
@@ -99,11 +101,12 @@ void main(){
     float len = length((xyz.xy + 1.) * resolution / 2. - mouse);
     float x = len / cursor;
     if (len < cursor && buttons == 1){
-        gl_FragColor.x += 0.05 * (1. -  x * x * (3. - 2. * x));
+        gl_FragColor.x += cursor_elev_level * (1. -  x * x * (3. - 2. * x));
     }
     if (len < cursor && buttons == 2){
         gl_FragColor.y += cursor_water_level * (1. -  x * x * (3. - 2. * x));
     }
+    gl_FragColor.y += rain;
     if (gl_FragColor.x <= 0.){
         gl_FragColor.xy = vec2(0.);
     }
