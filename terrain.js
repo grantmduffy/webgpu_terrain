@@ -8,12 +8,12 @@ precision mediump float;
 #define cursor 100.
 #define fog_gamma 500.
 #define min_water_depth 0.01
-#define K_sat 0.005
+#define K_sat 0.01
 #define K_uptake 0.0003
 #define K_sediment_convection 0.001
 #define cursor_water_level 0.002
 #define cursor_elev_level 0.1
-#define rain 0.0001
+#define rain 0.00003
 
 uniform vec2 resolution;
 uniform vec2 tex_res;
@@ -107,8 +107,8 @@ void main(){
         gl_FragColor.y += cursor_water_level * (1. -  x * x * (3. - 2. * x));
     }
     gl_FragColor.y += rain;
-    if (gl_FragColor.x <= 0.){
-        gl_FragColor.xy = vec2(0.);
+    if (gl_FragColor.x <= 0.5){
+        gl_FragColor.y = 0.5 - gl_FragColor.x;
     }
 }
 `;
