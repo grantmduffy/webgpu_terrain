@@ -14,6 +14,7 @@ precision mediump float;
 #define cursor_water_level 0.002
 #define cursor_elev_level 0.1
 #define rain 0.0001
+#define flow_rate 0.2
 
 uniform vec2 resolution;
 uniform vec2 tex_res;
@@ -66,39 +67,45 @@ float t_filt = 0.5;
 
 void main(){
     vec2 uv = gl_FragCoord.xy / tex_res;
+
+    // [x: elevation, y: water level, z: sediment, w: none]
     vec4 b = sample(background_layer, uv);
     vec4 b_n = sample(background_layer, uv + vec2(0., 1.) / tex_res);
     vec4 b_s = sample(background_layer, uv + vec2(0., -1.) / tex_res);
     vec4 b_e = sample(background_layer, uv + vec2(1., 0.) / tex_res);
     vec4 b_w = sample(background_layer, uv + vec2(-1., 0.) / tex_res);
-
-    // water flow
-    b.y += .2 * (
-            clamp(b_n.x + b_n.y - b.x - b.y, -b.y / 4., b_n.y / 4.)
-        +  clamp(b_s.x + b_s.y - b.x - b.y, -b.y / 4., b_s.y / 4.)
-        +  clamp(b_e.x + b_e.y - b.x - b.y, -b.y / 4., b_e.y / 4.)
-        +  clamp(b_w.x + b_w.y - b.x - b.y, -b.y / 4., b_w.y / 4.)
-        );
     gl_FragColor = b;
 
+    // water flow
+    vec4 flux = vec4(  // [n, s, e, w]
+        clamp(b_n.x + b_n.y - b.x - b.y, -b.y / 4., b_n.y / 4.),
+        clamp(b_s.x + b_s.y - b.x - b.y, -b.y / 4., b_s.y / 4.),
+        clamp(b_e.x + b_e.y - b.x - b.y, -b.y / 4., b_e.y / 4.),
+        clamp(b_w.x + b_w.y - b.x - b.y, -b.y / 4., b_w.y / 4.)
+    ) * flow_rate;
+    gl_FragColor.y += dot(flux, vec4(1.));
+
     // water velocity
-    vec2 vel = get_water_velocity(uv);
+    vec2 vel = vec2(
+        flux.w - flux.z,   // flow in x
+        flux.y - flux.x  // flow in y
+    ) / 2. / b.y;
 
     // convect sediment
-    gl_FragColor.z = sample(background_layer, uv - vel * K_sediment_convection).z;
+    // gl_FragColor.z = sample(background_layer, uv - vel * K_sediment_convection).z;
     
-    float vel_mag = length(vel);
+    // float vel_mag = length(vel);
     // float uptake = min(
     //     K_uptake * vel_mag, 
     //     K_sat * vel_mag * pow(b.y, 2.) - b.z
     // );
-    float uptake = K_uptake * (K_sat * vel_mag * b.y - b.z);
-    gl_FragColor.z += uptake;
-    if (uptake >= 0.){
-        gl_FragColor.x -= uptake;
-    } else {
-        gl_FragColor.x -= 1. * uptake;
-    }
+    // float uptake = K_uptake * (K_sat * vel_mag * b.y - b.z);
+    // gl_FragColor.z += uptake;
+    // if (uptake >= 0.){
+    //     gl_FragColor.x -= uptake;
+    // } else {
+    //     gl_FragColor.x -= 1. * uptake;
+    // }
     
     vec2 xy = (2. * gl_FragCoord.xy / tex_res - 1.) * 100.;
     vec4 xyz = M_proj * vec4(xy, 0., 1.);
@@ -347,7 +354,7 @@ function compile_shader(source, type){
     gl.shaderSource(shader, global_glsl + source);
     gl.compileShader(shader);
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)){
-        console.error('Failed to compile vertex shader:', gl.getShaderInfoLog(shader));
+        console.error('Failed to compile shader:', gl.getShaderInfoLog(shader));
         return;
     }
     return shader;
