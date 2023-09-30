@@ -7,7 +7,7 @@ precision mediump float;
 
 #define cursor 100.
 #define fog_gamma 500.
-#define min_water_depth 0.01
+#define min_water_depth 0.1
 #define K_sat 0.1
 #define K_uptake 0.1
 #define K_sediment_convection 0.001
@@ -89,10 +89,20 @@ void main(){
     vec2 vel = vec2(
         flux.w - flux.z,   // flow in x
         flux.y - flux.x  // flow in y
-    ) / 2. / b.y;
+    ) / 2. / (b.y + min_water_depth);
 
     // convect sediment
-    // gl_FragColor.z = sample(background_layer, uv - vel * K_sediment_convection).z;
+    // flux * (sediment / water_depth)
+    gl_FragColor.z += dot(
+        flux, 
+        vec4(
+            clamp(b_n.y == 0. ? 0. : b_n.z / b_n.y, 0., 1.), 
+            clamp(b_s.y == 0. ? 0. : b_s.z / b_s.y, 0., 1.), 
+            clamp(b_e.y == 0. ? 0. : b_e.z / b_e.y, 0., 1.), 
+            clamp(b_w.y == 0. ? 0. : b_w.z / b_w.y, 0., 1.)
+        )
+    );
+    gl_FragColor.z = max(gl_FragColor.z, 0.);
     
     // float vel_mag = length(vel);
     // float uptake = min(
@@ -116,12 +126,17 @@ void main(){
         gl_FragColor.x += cursor_elev_level * (1. -  x * x * (3. - 2. * x));
     }
     if (len < cursor && buttons == 2){
-        gl_FragColor.y += cursor_water_level * (1. -  x * x * (3. - 2. * x));
+        // gl_FragColor.y += cursor_water_level * (1. -  x * x * (3. - 2. * x));
+        gl_FragColor.z += cursor_water_level * (1. -  x * x * (3. - 2. * x));
+        // gl_FragColor.z = 1.;
     }
-    gl_FragColor.y += rain;
     if (gl_FragColor.x + gl_FragColor.y <= 0.5){
         gl_FragColor.y = 0.5 - gl_FragColor.x;
     }
+    if (gl_FragColor.x > 0.){
+        gl_FragColor.y += rain;
+    }
+    
 }
 `;
 
@@ -202,23 +217,48 @@ varying vec3 xyz;
 #define deposition_color vec4(0., 1., 0., 1.)
 
 void main(){
+    // [x: elevation, y: water level, z: sediment, w: none]
     vec4 b = sample(background_layer, uv);
     vec4 b_n = sample(background_layer, uv + vec2(0., 1.) / tex_res);
     vec4 b_s = sample(background_layer, uv + vec2(0., -1.) / tex_res);
     vec4 b_e = sample(background_layer, uv + vec2(1., 0.) / tex_res);
     vec4 b_w = sample(background_layer, uv + vec2(-1., 0.) / tex_res);
 
-    vec2 vel = get_water_velocity(uv);
-    float vel_mag = length(vel);
-    float sediment = 1000. * K_uptake * (K_sat * vel_mag * b.y - b.z);
-    vec4 wc = vec4(water_color.rgb, min(0.5, b.g * 1.));
-    if (sediment >= 0.){
-        gl_FragColor = (1. - sediment) * wc + sediment * sediment_color;
-    } else {
-        sediment = -sediment;
-        gl_FragColor = (1. - sediment) * wc + sediment * deposition_color;
-        // gl_FragColor = vec4(0., 1., 0., 1.);
-    }
+    // water flow
+    vec4 flux = vec4(  // [n, s, e, w]
+        clamp(b_n.x + b_n.y - b.x - b.y, -b.y / 4., b_n.y / 4.),
+        clamp(b_s.x + b_s.y - b.x - b.y, -b.y / 4., b_s.y / 4.),
+        clamp(b_e.x + b_e.y - b.x - b.y, -b.y / 4., b_e.y / 4.),
+        clamp(b_w.x + b_w.y - b.x - b.y, -b.y / 4., b_w.y / 4.)
+    ) * flow_rate;
+    gl_FragColor.y += dot(flux, vec4(1.));
+
+    // water velocity
+    vec2 vel = vec2(
+        flux.w - flux.z,   // flow in x
+        flux.y - flux.x  // flow in y
+    ) / 2. / (b.y + min_water_depth);
+
+    float vel_mag = clamp(length(vel), 0., 1.);
+    
+    gl_FragColor = vec4(
+        vel_mag * 100., 
+        // b.z * 100., 
+        vel_mag * b.y * 100.,
+        1., 
+        0.5
+    );
+
+
+    // float sediment = 1000. * K_uptake * (K_sat * vel_mag * b.y - b.z);
+    // vec4 wc = vec4(water_color.rgb, min(0.5, b.g * 1.));
+    // if (sediment >= 0.){
+    //     gl_FragColor = (1. - sediment) * wc + sediment * sediment_color;
+    // } else {
+    //     sediment = -sediment;
+    //     gl_FragColor = (1. - sediment) * wc + sediment * deposition_color;
+    //     // gl_FragColor = vec4(0., 1., 0., 1.);
+    // }
     
     
     // vec3 normal = normalize(vec3(
