@@ -7,9 +7,9 @@ precision mediump float;
 
 #define cursor 100.
 #define fog_gamma 500.
-#define min_water_depth 0.1
-#define K_sat 0.1
-#define K_uptake 0.1
+#define min_water_depth 0.2
+#define K_sat 3.
+#define K_uptake 0.003
 #define K_sediment_convection 0.001
 #define cursor_water_level 0.002
 #define cursor_elev_level 0.1
@@ -90,6 +90,7 @@ void main(){
         flux.w - flux.z,   // flow in x
         flux.y - flux.x  // flow in y
     ) / 2. / (b.y + min_water_depth);
+    float vel_mag = length(vel);
 
     // convect sediment
     // flux * (sediment / water_depth)
@@ -104,19 +105,14 @@ void main(){
     );
     gl_FragColor.z = max(gl_FragColor.z, 0.);
     
-    // float vel_mag = length(vel);
-    // float uptake = min(
-    //     K_uptake * vel_mag, 
-    //     K_sat * vel_mag * pow(b.y, 2.) - b.z
-    // );
-    // float uptake = K_uptake * (K_sat * vel_mag * b.y - b.z);
-    // gl_FragColor.z += uptake;
-    // if (uptake >= 0.){
-    //     gl_FragColor.x -= uptake;
-    // } else {
-    //     gl_FragColor.x -= 1. * uptake;
-    // }
+    float uptake = min(
+        vel_mag * K_uptake,
+        vel_mag * gl_FragColor.y * K_sat - gl_FragColor.z
+    );
+    gl_FragColor.z += uptake;
+    gl_FragColor.x -= uptake;
     
+    // world coord & cursor calculation
     vec2 xy = (2. * gl_FragCoord.xy / tex_res - 1.) * 100.;
     vec4 xyz = M_proj * vec4(xy, 0., 1.);
     xyz /= xyz.w;
@@ -240,39 +236,29 @@ void main(){
     ) / 2. / (b.y + min_water_depth);
 
     float vel_mag = clamp(length(vel), 0., 1.);
-    
+    float saturation = b.z / (vel_mag * b.y * K_sat);
     gl_FragColor = vec4(
-        vel_mag * 100., 
-        // b.z * 100., 
-        vel_mag * b.y * 100.,
+        0.,
+        // vel_mag * 100., 
+        b.z * 100., 
+        // vel_mag * b.y * K_sat * 100.,
+        // saturation,
         1., 
         0.5
     );
 
-
-    // float sediment = 1000. * K_uptake * (K_sat * vel_mag * b.y - b.z);
-    // vec4 wc = vec4(water_color.rgb, min(0.5, b.g * 1.));
-    // if (sediment >= 0.){
-    //     gl_FragColor = (1. - sediment) * wc + sediment * sediment_color;
-    // } else {
-    //     sediment = -sediment;
-    //     gl_FragColor = (1. - sediment) * wc + sediment * deposition_color;
-    //     // gl_FragColor = vec4(0., 1., 0., 1.);
-    // }
-    
-    
-    // vec3 normal = normalize(vec3(
-    //     dot(b_e.xy, vec2(1.)) 
-    //     - dot(b_w.xy, vec2(1.)),
-    //     dot(b_n.xy, vec2(1.)) 
-    //     - dot(b_s.xy, vec2(1.)),
-    //     200. / 512.
-    // ));
-    // float reflection_amount = 1. - dot(normalize(camera_position - xyz), normal);
-    // gl_FragColor = reflection_amount * fog_color + (1. - reflection_amount) * water_color;
-    // float water_amount = b.g;
-    // // gl_FragColor = vec4(0., 0., b.z * .1, 1.);
-    // gl_FragColor.a = min(0.5, water_amount * 1.);
+    vec3 normal = normalize(vec3(
+        dot(b_e.xy, vec2(1.)) 
+        - dot(b_w.xy, vec2(1.)),
+        dot(b_n.xy, vec2(1.)) 
+        - dot(b_s.xy, vec2(1.)),
+        200. / 512.
+    ));
+    float reflection_amount = 1. - dot(normalize(camera_position - xyz), normal);
+    gl_FragColor = reflection_amount * fog_color + (1. - reflection_amount) * water_color;
+    float water_amount = b.g;
+    // gl_FragColor = vec4(0., 0., b.z * .1, 1.);
+    gl_FragColor.a = min(0.5, water_amount * 1.);
 }
 
 `;
