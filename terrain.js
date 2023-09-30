@@ -129,7 +129,7 @@ void main(){
     if (gl_FragColor.x + gl_FragColor.y <= 0.5){
         gl_FragColor.y = 0.5 - gl_FragColor.x;
     }
-    if (gl_FragColor.x > 0.){
+    if (gl_FragColor.x > 0.5){
         gl_FragColor.y += rain;
     }
     
