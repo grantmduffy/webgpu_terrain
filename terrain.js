@@ -132,6 +132,7 @@ void main(){
     if (gl_FragColor.x > 0.5){
         gl_FragColor.y += rain;
     }
+    gl_FragColor.a = 0.;
     
 }
 `;
@@ -370,7 +371,7 @@ function setup_gl(canvas){
     // gl.enable(gl.CULL_FACE);
     // gl.cullFace(gl.FRONT);
     // gl.cullFace(gl.BACK);
-    gl.enable(gl.BLEND);
+    // gl.enable(gl.BLEND);
     gl.blendEquation(gl.FUNC_ADD);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 }
@@ -455,7 +456,7 @@ function set_uniforms(program){
 function add_layer(
         name, program, 
         vertex_buffer, tri_buffer, n_tris, clear=true, fbo=null,        
-        active_texture=null, texture1=null, texture2=null,
+        active_texture=null, texture1=null, texture2=null, blend_alpha=true
     ){
     layers.push({
         name: name,
@@ -467,7 +468,8 @@ function add_layer(
         active_texture: active_texture,
         sample_texture: texture1,
         fbo_texture: texture2,
-        clear: clear
+        clear: clear,
+        blend_alpha: blend_alpha
     });
 }
 
@@ -518,6 +520,13 @@ function draw_layers(){
         if (layer.clear){
             gl.clearColor(172 / 255, 214 / 255, 242 / 255, 1);
             gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
+        }
+
+        // set alpha blend function
+        if (layer.blend_alpha){
+            gl.enable(gl.BLEND);
+        } else {
+            gl.disable(gl.BLEND);
         }
 
         // draw
@@ -591,7 +600,8 @@ function init(){
         background_fbo,
         0,
         texture0, 
-        texture1
+        texture1,
+        false
     );
     
     // add_layer(
