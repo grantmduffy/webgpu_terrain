@@ -3,6 +3,8 @@
 let global_glsl = `
 precision mediump float;
 uniform vec2 tex_res;
+uniform sampler2D feedback_layer;
+uniform vec2 resolution;
 `;
 
 let screen_vs_src = `
@@ -19,12 +21,17 @@ let feedback_fs_src = `
 void main(){
     vec2 uv = gl_FragCoord.xy / tex_res;
     gl_FragColor = vec4(1., uv.x, uv.y, 1.);
+    // gl_FragColor = vec4(1., 0., 0., 1.);
+    // gl_FragColor = texture2D(feedback_layer, uv);
 }
 `
 
 let display_fs_src = `
 void main(){
-    gl_FragColor = vec4(0., 1., 1., 1.);
+    vec2 uv = gl_FragCoord.xy / resolution;
+    // gl_FragColor = texture2D(feedback_layer, uv);
+    // gl_FragColor = vec4(uv.x, 1., uv.y, 1.);
+    gl_FragColor = texture2D(feedback_layer, vec2(0.));
 }
 `
 
@@ -157,27 +164,24 @@ function add_layer(
 }
 
 function swap_textures(l){
-    for (i in layers){
+    for (let i = 0; i < layers.length; i++){
         let layer = layers[i];
         
         // swap textures
         [layers[i].sample_texture, layers[i].fbo_texture] = [layer.fbo_texture, layer.sample_texture];
 
         // setup textures and framebuffer
-        gl.bindFramebuffer(gl.FRAMEBUFFER, layer.fbo);
+        // gl.bindFramebuffer(gl.FRAMEBUFFER, layer.fbo);
         if (layer.sample_texture != null){
             gl.activeTexture(gl.TEXTURE0 + i);
-            gl.bindTexture(gl.TEXTURE_2D, layer.sample_texture);
-        }
-        if (layer.fbo != null){
-            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, layer.fbo_texture, 0);
+            gl.bindTexture(gl.TEXTURE_2D, layers[i].sample_texture);
         }
     }
 }
 
 function draw_layers(){
 
-    for (i in layers){
+    for (let i = 0; i < layers.length; i++){
 
         let layer = layers[i];
         
@@ -194,7 +198,7 @@ function draw_layers(){
         
         // set layer texture uniforms for this program
         gl.useProgram(layer.program);
-        for (j in layers){
+        for (j = 0; j < layers.length; j++){
             l = layers[j];
             if (l.sample_texture != null){
                 let loc = gl.getUniformLocation(layer.program, l.name);
@@ -208,7 +212,6 @@ function draw_layers(){
         set_uniforms(layer.program);
 
         // clear canvas
-        // gl.clearColor(1., 0., 0., 1.);
         if (layer.clear){
             gl.clearColor(172 / 255, 214 / 255, 242 / 255, 1);
             gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
@@ -219,6 +222,12 @@ function draw_layers(){
             gl.enable(gl.BLEND);
         } else {
             gl.disable(gl.BLEND);
+        }
+
+        // set fbo
+        gl.bindFramebuffer(gl.FRAMEBUFFER, layer.fbo);
+        if (layer.fbo != null){
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, layer.fbo_texture, 0);
         }
 
         // draw
@@ -244,7 +253,7 @@ function init(){
     ];
 
     add_layer(
-        'vel_layer',
+        'feedback_layer',
         link_program(
             compile_shader(screen_vs_src, gl.VERTEX_SHADER),
             compile_shader(feedback_fs_src, gl.FRAGMENT_SHADER)
@@ -255,7 +264,7 @@ function init(){
         false,
         create_fbo(width, height),
         create_texture(width, height, [1.0, 0.0, 0.0, 1.0]),
-        create_texture(width, height, [1.0, 0.0, 0.0, 1.0]),
+        create_texture(width, height, [0.0, 1.0, 0.0, 1.0]),
     );
 
     add_layer(
@@ -271,6 +280,7 @@ function init(){
     );
 
     let loop = function(){
+        swap_textures();
         draw_layers();
         requestAnimationFrame(loop);
     }
