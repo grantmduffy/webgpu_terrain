@@ -210,18 +210,18 @@ function draw_layers(){
 
         // set the rest of the uniforms
         set_uniforms(layer.program);
-
-        // clear canvas
-        if (layer.clear){
-            gl.clearColor(172 / 255, 214 / 255, 242 / 255, 1);
-            gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
-        }
-
+        
         // set alpha blend function
         if (layer.blend_alpha){
             gl.enable(gl.BLEND);
         } else {
             gl.disable(gl.BLEND);
+        }
+        
+        // clear canvas
+        if (layer.clear){
+            gl.clearColor(172 / 255, 214 / 255, 242 / 255, 1);
+            gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
         }
 
         // set fbo
@@ -232,7 +232,8 @@ function draw_layers(){
                 gl.TEXTURE_2D, layer.fbo_texture, 0
             );
         }
-
+        
+        console.log(layer.name, layer.clear, layer.blend_alpha, layer.fbo)
         // draw
         gl.drawElements(gl.TRIANGLES, layer.n_tris * 3, gl.UNSIGNED_SHORT, 0);
 
@@ -258,6 +259,8 @@ function init(){
     let screen_vs = compile_shader(screen_vs_src, gl.VERTEX_SHADER);
     let rect_vert_buffer = create_buffer(new Float32Array(rect_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let rect_tri_buffer = create_buffer(new Uint16Array(rect_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
+    let tex1 = create_texture(texture_res, texture_res, [1.0, 0.0, 0.0, 1.0]);
+    let tex2 = create_texture(texture_res, texture_res, [0.0, 1.0, 0.0, 1.0]);
 
     add_layer(
         'feedback_layer',
@@ -270,8 +273,8 @@ function init(){
         rect_tris.length,
         true,
         create_fbo(texture_res, texture_res),
-        create_texture(texture_res, texture_res, [1.0, 0.0, 0.0, 1.0]),
-        create_texture(texture_res, texture_res, [0.0, 1.0, 0.0, 1.0]),
+        tex1,
+        tex2,
         false
     );
 
