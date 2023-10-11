@@ -45,7 +45,7 @@ var offset_x = 0;
 var offset_y = 0;
 var frame_i = 0;
 const texture_res = 512;
-const fps = 60;
+const fps = 1;
 
 var layers = [];
 
@@ -171,7 +171,7 @@ function swap_textures(l){
         [layers[i].sample_texture, layers[i].fbo_texture] = [layer.fbo_texture, layer.sample_texture];
 
         // setup textures and framebuffer
-        // gl.bindFramebuffer(gl.FRAMEBUFFER, layer.fbo);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, layer.fbo);
         if (layer.sample_texture != null){
             gl.activeTexture(gl.TEXTURE0 + i);
             gl.bindTexture(gl.TEXTURE_2D, layers[i].sample_texture);
@@ -227,7 +227,10 @@ function draw_layers(){
         // set fbo
         gl.bindFramebuffer(gl.FRAMEBUFFER, layer.fbo);
         if (layer.fbo != null){
-            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, layer.fbo_texture, 0);
+            gl.framebufferTexture2D(
+                gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, 
+                gl.TEXTURE_2D, layer.fbo_texture, 0
+            );
         }
 
         // draw
@@ -252,37 +255,47 @@ function init(){
         [0, 2, 3]
     ];
 
+    let screen_vs = compile_shader(screen_vs_src, gl.VERTEX_SHADER);
+    let rect_vert_buffer = create_buffer(new Float32Array(rect_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+    let rect_tri_buffer = create_buffer(new Uint16Array(rect_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
+
     add_layer(
         'feedback_layer',
         link_program(
-            compile_shader(screen_vs_src, gl.VERTEX_SHADER),
+            screen_vs,
             compile_shader(feedback_fs_src, gl.FRAGMENT_SHADER)
         ),
-        create_buffer(new Float32Array(rect_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW),
-        create_buffer(new Uint16Array(rect_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW),
+        rect_vert_buffer,
+        rect_tri_buffer,
         rect_tris.length,
-        false,
-        create_fbo(width, height),
-        create_texture(width, height, [1.0, 0.0, 0.0, 1.0]),
-        create_texture(width, height, [0.0, 1.0, 0.0, 1.0]),
+        true,
+        create_fbo(texture_res, texture_res),
+        create_texture(texture_res, texture_res, [1.0, 0.0, 0.0, 1.0]),
+        create_texture(texture_res, texture_res, [0.0, 1.0, 0.0, 1.0]),
+        false
     );
 
     add_layer(
         'display_layer',
         link_program(
-            compile_shader(screen_vs_src, gl.VERTEX_SHADER),
+            screen_vs,
             compile_shader(display_fs_src, gl.FRAGMENT_SHADER)
         ),
-        create_buffer(new Float32Array(rect_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW),
-        create_buffer(new Uint16Array(rect_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW),
+        rect_vert_buffer,
+        rect_tri_buffer,
         rect_tris.length,
-        true,
+        false,
+        null,
+        null,
+        null,
+        true
     );
 
     let loop = function(){
         swap_textures();
         draw_layers();
-        requestAnimationFrame(loop);
+        setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
+        // requestAnimationFrame(loop);
     }
     requestAnimationFrame(loop);
 
