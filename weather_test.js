@@ -29,9 +29,10 @@ void main(){
 let display_fs_src = `
 void main(){
     vec2 uv = gl_FragCoord.xy / resolution;
-    // gl_FragColor = texture2D(feedback_layer, uv);
+    gl_FragColor = texture2D(feedback_layer, uv);
+    gl_FragColor.a = 1.;
     // gl_FragColor = vec4(uv.x, 1., uv.y, 1.);
-    gl_FragColor = texture2D(feedback_layer, vec2(0.));
+    // gl_FragColor = texture2D(feedback_layer, vec2(0.));
 }
 `
 
@@ -145,7 +146,7 @@ function set_uniforms(program){
 function add_layer(
         name, program, 
         vertex_buffer, tri_buffer, n_tris, clear=true, fbo=null,        
-        texture1=null, texture2=null, blend_alpha=true
+        texture1=null, texture2=null, blend_alpha=true, clear_color=[0.5, 0.5, 0.5, 1.0]
     ){
     let active_texture = (fbo == null) ? null : layers.length;
     layers.push({
@@ -159,7 +160,8 @@ function add_layer(
         sample_texture: texture1,
         fbo_texture: texture2,
         clear: clear,
-        blend_alpha: blend_alpha
+        blend_alpha: blend_alpha,
+        clear_color: clear_color
     });
 }
 
@@ -175,6 +177,7 @@ function swap_textures(l){
         if (layer.sample_texture != null){
             gl.activeTexture(gl.TEXTURE0 + i);
             gl.bindTexture(gl.TEXTURE_2D, layers[i].sample_texture);
+            console.log('sample texture to', layers[i].sample_texture.name);
         }
     }
 }
@@ -217,12 +220,6 @@ function draw_layers(){
         } else {
             gl.disable(gl.BLEND);
         }
-        
-        // clear canvas
-        if (layer.clear){
-            gl.clearColor(172 / 255, 214 / 255, 242 / 255, 1);
-            gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
-        }
 
         // set fbo
         gl.bindFramebuffer(gl.FRAMEBUFFER, layer.fbo);
@@ -231,9 +228,21 @@ function draw_layers(){
                 gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, 
                 gl.TEXTURE_2D, layer.fbo_texture, 0
             );
+            console.log('fbo texture to ', layer.fbo_texture.name);
+        }
+
+        // clear canvas
+        if (layer.clear){
+            // gl.clearColor(172 / 255, 214 / 255, 242 / 255, 1);
+            gl.clearColor(...layer.clear_color);
+            gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
         }
         
-        console.log(layer.name, layer.clear, layer.blend_alpha, layer.fbo)
+        // console.log(layer.name, layer.clear, layer.blend_alpha, layer.fbo);
+        if (layer.sample_texture != null){
+            console.log(layer.sample_texture.name, layer.fbo_texture.name);
+        }
+        
         // draw
         gl.drawElements(gl.TRIANGLES, layer.n_tris * 3, gl.UNSIGNED_SHORT, 0);
 
@@ -260,7 +269,9 @@ function init(){
     let rect_vert_buffer = create_buffer(new Float32Array(rect_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let rect_tri_buffer = create_buffer(new Uint16Array(rect_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
     let tex1 = create_texture(texture_res, texture_res, [1.0, 0.0, 0.0, 1.0]);
+    tex1.name = 'tex1';
     let tex2 = create_texture(texture_res, texture_res, [0.0, 1.0, 0.0, 1.0]);
+    tex2.name = 'tex2';
 
     add_layer(
         'feedback_layer',
@@ -271,11 +282,12 @@ function init(){
         rect_vert_buffer,
         rect_tri_buffer,
         rect_tris.length,
-        true,
+        false,
         create_fbo(texture_res, texture_res),
         tex1,
         tex2,
-        false
+        false,
+        [1., 1., 0., 1.]
     );
 
     add_layer(
@@ -287,11 +299,12 @@ function init(){
         rect_vert_buffer,
         rect_tri_buffer,
         rect_tris.length,
+        true,
+        null,
+        null,
+        null,
         false,
-        null,
-        null,
-        null,
-        true
+        [0., 1., 1., 1.]
     );
 
     let loop = function(){
