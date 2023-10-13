@@ -1,15 +1,7 @@
 // python -m http.server 8888
 
-let global_glsl = `
+var global_glsl = `
 precision mediump float;
-
-#define pen 30.
-
-uniform vec2 tex_res;
-uniform sampler2D feedback_layer;
-uniform vec2 resolution;
-uniform vec2 mouse;
-uniform int buttons;
 `;
 
 let screen_vs_src = `
@@ -52,11 +44,12 @@ const texture_res = 512;
 const fps = 120;
 
 var layers = [];
+var uniforms = {};
 
 function mouse_move(event){
-    mouse_x = event.clientX - offset_x;
-    mouse_y = event.srcElement.height - event.clientY + offset_y;
-    buttons = event.buttons;
+    uniforms['mouse'].value[0] = event.clientX - offset_x;
+    uniforms['mouse'].value[0] = event.srcElement.height - event.clientY + offset_y;
+    uniforms['buttons'].value = event.buttons;
 }
 
 function setup_gl(canvas){
@@ -139,11 +132,47 @@ function create_fbo(width, height){
     return fbo;
 }
 
+function add_uniform(name, type, value, input=false){
+    uniforms[name] = {
+        'type': type,
+        'value': value,
+        'input': input
+    };
+    global_glsl = global_glsl.concat('\nuniform ', type, ' ', name, ';');
+}
+
 function set_uniforms(program){
-    gl.uniform2f(gl.getUniformLocation(program, 'resolution'), width, height);
-    gl.uniform2f(gl.getUniformLocation(program, 'tex_res'), texture_res, texture_res);
-    gl.uniform2f(gl.getUniformLocation(program, 'mouse'), mouse_x, mouse_y);
-    gl.uniform1i(gl.getUniformLocation(program, 'buttons'), buttons);
+    for (var name in uniforms){
+        let uniform = uniforms[name];
+        let loc = gl.getUniformLocation(program, name);
+        switch (uniform.type) {
+            case 'float':
+                gl.uniform1f(loc, uniform.value);
+                break;
+            case 'int':
+            case 'sampler2D':
+                gl.uniform1i(loc, uniform.value);
+                break;
+            case 'vec2':
+                gl.uniform2f(loc, ...uniform.value);
+                break;
+            case 'vec3':
+                gl.uniform3f(loc, ...uniform.value);
+                break;
+            case 'vec4':
+                gl.uniform4f(loc, ...uniform.value);
+                break;
+            case 'mat2':
+                gl.uniformMatrix2fv(loc, gl.False, uniform.value);
+                break;
+            case 'mat3':
+                gl.uniformMatrix3fv(loc, gl.False, uniform.value);
+                break;
+            case 'mat4':
+                gl.uniformMatrix4fv(loc, gl.False, uniform.value);
+                break;
+        }
+    }
 }
 
 function add_layer(
@@ -260,6 +289,12 @@ function init(){
         [0, 1, 2],
         [0, 2, 3]
     ];
+
+    add_uniform('pen', 'float', 30, true);
+    add_uniform('tex_res', 'vec2', [512, 512]);
+    add_uniform('resolution', 'vec2', [width, height]);
+    add_uniform('mouse', 'vec2', [0, 0]);
+    add_uniform('buttons', 'int', 0);
 
     let screen_vs = compile_shader(screen_vs_src, gl.VERTEX_SHADER);
     let rect_vert_buffer = create_buffer(new Float32Array(rect_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
