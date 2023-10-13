@@ -48,7 +48,7 @@ var uniforms = {};
 
 function mouse_move(event){
     uniforms['mouse'].value[0] = event.clientX - offset_x;
-    uniforms['mouse'].value[0] = event.srcElement.height - event.clientY + offset_y;
+    uniforms['mouse'].value[1] = event.srcElement.height - event.clientY + offset_y;
     uniforms['buttons'].value = event.buttons;
 }
 
@@ -176,25 +176,44 @@ function set_uniforms(program){
 }
 
 function add_layer(
-        name, program, 
+        name, vertex_shader_src, fragment_shader_src, 
         vertex_buffer, tri_buffer, n_tris, clear=true, fbo=null,        
         texture1=null, texture2=null, blend_alpha=true, clear_color=[0.5, 0.5, 0.5, 1.0]
     ){
-    let active_texture = (fbo == null) ? null : layers.length;
+    // let active_texture = (fbo == null) ? null : layers.length;
     layers.push({
         name: name,
-        program: program,
+        vertex_shader_src: vertex_shader_src,
+        fragment_shader_src: fragment_shader_src,
         vertex_buffer: vertex_buffer,
         tri_buffer: tri_buffer,
         n_tris: n_tris,
         fbo: fbo,
-        active_texture: active_texture,
+        // active_texture: active_texture,
         sample_texture: texture1,
         fbo_texture: texture2,
         clear: clear,
         blend_alpha: blend_alpha,
         clear_color: clear_color
     });
+}
+
+function compile_layers(){
+
+    // add sampler2D uniforms for each layer
+    for (var i = 0; i < layers.length; i++){
+        add_uniform(layers[i].name, 'sampler2D', i);
+    }
+
+    // compile programs for each layer
+    for (var i = 0; i < layers.length; i++){
+        let layer = layers[i];
+        let vertex_shader = compile_shader(layer.vertex_shader_src, gl.VERTEX_SHADER);
+        let fragment_shader = compile_shader(layer.fragment_shader_src, gl.FRAGMENT_SHADER);
+        let program = link_program(vertex_shader, fragment_shader);
+        layers[i].program = program;
+    }
+
 }
 
 function swap_textures(l){
@@ -230,19 +249,7 @@ function draw_layers(){
         );
         gl.enableVertexAttribArray(pos_attr_loc);
         
-        // set layer texture uniforms for this program
         gl.useProgram(layer.program);
-        for (j = 0; j < layers.length; j++){
-            l = layers[j];
-            if (l.sample_texture != null){
-                let loc = gl.getUniformLocation(layer.program, l.name);
-                if (loc != null){
-                    gl.uniform1i(loc, j);
-                }
-            }
-        }
-
-        // set the rest of the uniforms
         set_uniforms(layer.program);
         
         // set alpha blend function
@@ -306,10 +313,8 @@ function init(){
 
     add_layer(
         'feedback_layer',
-        link_program(
-            screen_vs,
-            compile_shader(feedback_fs_src, gl.FRAGMENT_SHADER)
-        ),
+        screen_vs_src,
+        feedback_fs_src,
         rect_vert_buffer,
         rect_tri_buffer,
         rect_tris.length,
@@ -323,10 +328,8 @@ function init(){
 
     add_layer(
         'display_layer',
-        link_program(
-            screen_vs,
-            compile_shader(display_fs_src, gl.FRAGMENT_SHADER)
-        ),
+        screen_vs_src,
+        feedback_fs_src,
         rect_vert_buffer,
         rect_tri_buffer,
         rect_tris.length,
@@ -337,6 +340,8 @@ function init(){
         false,
         [0., 1., 1., 1.]
     );
+
+    compile_layers();
 
     let loop = function(){
         swap_textures();
