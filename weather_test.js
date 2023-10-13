@@ -2,9 +2,14 @@
 
 let global_glsl = `
 precision mediump float;
+
+#define pen 30.
+
 uniform vec2 tex_res;
 uniform sampler2D feedback_layer;
 uniform vec2 resolution;
+uniform vec2 mouse;
+uniform int buttons;
 `;
 
 let screen_vs_src = `
@@ -13,16 +18,17 @@ varying vec2 xy;
 
 void main(){
     gl_Position = vec4(vert_pos, 0., 1.);
-    xy = vert_pos;
 }
 `;
 
 let feedback_fs_src = `
 void main(){
     vec2 uv = gl_FragCoord.xy / tex_res;
-    gl_FragColor = vec4(1., uv.x, uv.y, 1.);
-    // gl_FragColor = vec4(1., 0., 0., 1.);
-    // gl_FragColor = texture2D(feedback_layer, uv);
+    gl_FragColor = texture2D(feedback_layer, uv);
+    gl_FragColor.xyz *= 0.95;
+    if (length(mouse - gl_FragCoord.xy) < pen){
+        gl_FragColor = vec4(0., 1., 1., 1.);
+    }
 }
 `
 
@@ -30,9 +36,6 @@ let display_fs_src = `
 void main(){
     vec2 uv = gl_FragCoord.xy / resolution;
     gl_FragColor = texture2D(feedback_layer, uv);
-    gl_FragColor.a = 1.;
-    // gl_FragColor = vec4(uv.x, 1., uv.y, 1.);
-    // gl_FragColor = texture2D(feedback_layer, vec2(0.));
 }
 `
 
@@ -46,7 +49,7 @@ var offset_x = 0;
 var offset_y = 0;
 var frame_i = 0;
 const texture_res = 512;
-const fps = 1;
+const fps = 120;
 
 var layers = [];
 
@@ -177,7 +180,6 @@ function swap_textures(l){
         if (layer.sample_texture != null){
             gl.activeTexture(gl.TEXTURE0 + i);
             gl.bindTexture(gl.TEXTURE_2D, layers[i].sample_texture);
-            console.log('sample texture to', layers[i].sample_texture.name);
         }
     }
 }
@@ -228,7 +230,6 @@ function draw_layers(){
                 gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, 
                 gl.TEXTURE_2D, layer.fbo_texture, 0
             );
-            console.log('fbo texture to ', layer.fbo_texture.name);
         }
 
         // clear canvas
@@ -236,11 +237,6 @@ function draw_layers(){
             // gl.clearColor(172 / 255, 214 / 255, 242 / 255, 1);
             gl.clearColor(...layer.clear_color);
             gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
-        }
-        
-        // console.log(layer.name, layer.clear, layer.blend_alpha, layer.fbo);
-        if (layer.sample_texture != null){
-            console.log(layer.sample_texture.name, layer.fbo_texture.name);
         }
         
         // draw
@@ -282,7 +278,7 @@ function init(){
         rect_vert_buffer,
         rect_tri_buffer,
         rect_tris.length,
-        false,
+        true,
         create_fbo(texture_res, texture_res),
         tex1,
         tex2,
@@ -299,7 +295,7 @@ function init(){
         rect_vert_buffer,
         rect_tri_buffer,
         rect_tris.length,
-        true,
+        false,
         null,
         null,
         null,
