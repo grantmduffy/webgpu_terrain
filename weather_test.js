@@ -19,7 +19,7 @@ void main(){
     gl_FragColor = texture2D(feedback_layer, uv);
     gl_FragColor.xyz *= decay_rate;
     if ((length(mouse - gl_FragCoord.xy) < pen_size) && (buttons != 0)){
-        gl_FragColor = vec4(1.);
+        gl_FragColor = pen_color;
     }
 }
 `
@@ -343,7 +343,7 @@ function init(){
     add_uniform('resolution', 'vec2', [width, height]);
     add_uniform('mouse', 'vec2', [0, 0]);
     add_uniform('buttons', 'int', 0);
-    add_uniform('background_color', 'vec4', [0, 1, 1, 1], true);
+    add_uniform('pen_color', 'vec4', [0, 1, 1, 1], true);
     add_uniform('decay_rate', 'float', 0.99, true, 0.8, 1);
     add_uniform('frame_i', 'int', 0);
     
