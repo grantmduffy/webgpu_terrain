@@ -12,6 +12,10 @@ function hex2rgba(x){
     return [((x >> 16) & 0xff) / 255.0, ((x >> 8) & 0xff) / 255.0, (x & 0xff) / 255.0, 1.0];
 }
 
+function rgba2hex(vals){
+    return '#' + vals.slice(0, -1).map(function(x){return Math.round(x * 255).toString(16).padStart(2, '0')}).join('');
+}
+
 function setup_gl(canvas){
     width = canvas.width;
     height = canvas.height;
@@ -107,7 +111,7 @@ function add_uniform(name, type, value, input=false, min=null, max=null){
             html = `<div class="uniform-input"><label for="${name}">${name}: </label><input type="color" id="${name}" onchange="{
                 uniforms['${name}'].value = hex2rgba(document.getElementById('${name}').value);
                 document.getElementById('${name}_value').innerText = uniforms['${name}'].value.map(function(x){return x.toPrecision(2);}).join(', ');
-            }"><label id="${name}_value">${uniforms[name].value}</label></div>`;
+            }" value="${rgba2hex(value)}"><label id="${name}_value">${uniforms[name].value}</label></div>`;
             inputs_el.innerHTML = inputs_el.innerHTML.concat(html);
             break;
         case 'float':
