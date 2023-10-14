@@ -7,7 +7,7 @@
   </head>
   <body onload="init();">
     <div><canvas 
-        width="800" height="600" id="gl-canvas" 
+        width="640" height="480" id="gl-canvas" 
         onmousemove="mouse_move(event);" 
         onmousedown="mouse_move(event);"
         onmouseup="mouse_move(event);"
@@ -15,9 +15,12 @@
         onmouseenter="mouse_move(event);"
     ></canvas></div>
     <a id="debug"></a>
-    <!-- <script src="radial_mesh.js"></script> -->
+    <div id="inputs"></div>
+
+    <script src="gl_layers.js"></script>
     <script src="circle_mesh.js"></script>
     <script src="gl-matrix-min.js"></script>
     <script src="terrain.js"></script>
+    
   </body>
 </html>

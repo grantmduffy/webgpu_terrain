@@ -1,55 +1,8 @@
 // python -m http.server 8888
-
-let global_glsl = `
-precision mediump float;
-
-#define fog_color vec4(0.6745098039215687, 0.8392156862745098, 0.9490196078431372, 1.)
-
-#define cursor 100.
-#define fog_gamma 500.
-#define min_water_depth 0.2
-#define K_sat 3.
-#define K_uptake 0.003
-#define K_sediment_convection 0.001
-#define cursor_water_level 0.002
-#define cursor_elev_level 0.1
-#define rain 0.0001
-#define flow_rate 0.2
-
-uniform vec2 resolution;
-uniform vec2 tex_res;
-uniform vec2 mouse;
-uniform int buttons;
-uniform sampler2D background_layer;
-uniform mat4 M_proj;
-uniform int frame_i;
-uniform mat4 M_camera;
-uniform vec3 sun_direction;
-uniform vec4 sun_color;
-uniform vec4 terrain_color;
-uniform vec4 water_color;
-uniform vec3 camera_position;
-
+global_glsl += `
 vec4 sample(sampler2D tex, vec2 uv){
-    // return texture2D(tex, clamp(uv, 0., 1.));
     return texture2D(tex, uv);
 }
-
-vec2 get_water_velocity(vec2 uv){
-    vec4 b = sample(background_layer, uv);
-    vec4 b_n = sample(background_layer, uv + vec2(0., 1.) / tex_res);
-    vec4 b_s = sample(background_layer, uv + vec2(0., -1.) / tex_res);
-    vec4 b_e = sample(background_layer, uv + vec2(1., 0.) / tex_res);
-    vec4 b_w = sample(background_layer, uv + vec2(-1., 0.) / tex_res);
-
-    vec2 vel = vec2(clamp(b_s.x + b_s.y - b.x - b.y, -b.y / 4., b_s.y / 4.)
-                  - clamp(b_n.x + b_n.y - b.x - b.y, -b.y / 4., b_n.y / 4.),
-                    clamp(b_w.x + b_w.y - b.x - b.y, -b.y / 4., b_w.y / 4.)
-                  - clamp(b_e.x + b_e.y - b.x - b.y, -b.y / 4., b_e.y / 4.));
-    vel /= b.y + min_water_depth;
-    return vel;
-}
-
 `;
 
 let simple_vertex_shader_src = `
@@ -134,26 +87,6 @@ void main(){
     }
     gl_FragColor.a = 0.;
     
-}
-`;
-
-let projection_vertex_shader_src = `
-attribute vec2 vert_pos;
-varying vec2 uv;
-
-void main(){
-    uv = (vert_pos / 100. + 1.) / 2.;
-    gl_Position = M_proj * vec4(vert_pos, 0., 1.);
-}
-
-`;
-
-let display_fragment_shader_src = `
-varying vec2 uv;
-
-void main(){
-    gl_FragColor = sample(background_layer, uv);
-    // gl_FragColor.a = 0.5;
 }
 `;
 
@@ -255,7 +188,8 @@ void main(){
         - dot(b_s.xy, vec2(1.)),
         200. / 512.
     ));
-    float reflection_amount = 1. - dot(normalize(camera_position - xyz), normal);
+    // float reflection_amount = 1. - dot(normalize(camera_position - xyz), normal);
+    float reflection_amount = 0.0;
     gl_FragColor = reflection_amount * fog_color + (1. - reflection_amount) * water_color;
     float water_amount = b.g;
     // gl_FragColor = vec4(0., 0., b.z * .1, 1.);
@@ -271,11 +205,6 @@ void main(){
 
 `;
 
-
-var mouse_x = 0;
-var mouse_y = 0;
-var buttons = 0;
-var gl = null;
 var width = 0;
 var height = 0;
 var offset_x = 0;
@@ -285,25 +214,15 @@ var rot_yaw = 0;
 const speed = 2;
 const rot_speed = 5;
 const vert_speed = 0.5;
-let camera_position = new Float32Array(2);
 var camera_height = 3.0;
-let V_direction = new Float32Array(2);
 let M_lookat = new Float32Array(16);
-var M_proj = new Float32Array(16);
 let M_perpective = new Float32Array(16);
 let M_camera = new Float32Array(16);
-// let sun_color = new Float32Array([0, 0, 0, 1]);
-let sun_color = new Float32Array([253 / 255, 251 / 255, 211 / 255, 1]);
-let terrain_color = new Float32Array([0, 154 / 255, 23 / 255, 1]);
-let water_color = new Float32Array([0 / 255, 80 / 255, 150 / 255, 0.7]);
-let sun_direction = new Float32Array([0.766044443118978, 0, 0.6427876096865393]);
-// let sun_direction = new Float32Array([0, 0, 1]);
+var camera_position = [0, 0];
 var rot_horizontal = 0;
-var frame_i = 0;
 const texture_res = 512;
 const fps = 60;
 
-var layers = [];
 
 function mouse_move(event){
     mouse_x = event.clientX - offset_x;
@@ -349,192 +268,6 @@ function on_keydown(event){
             camera_height -= vert_speed;
             break;
     }
-    // document.getElementById('debug').innerText = `\
-    // p=(${V_position[0].toFixed(4)}, ${V_position[1].toFixed(4)})\n\
-    // rot=${rot_yaw.toFixed(4)}\n\
-    // v=(${Math.cos(glMatrix.toRadian(rot_yaw)).toFixed(4)}, \
-    // ${Math.sin(glMatrix.toRadian(rot_yaw)).toFixed(4)})`;
-}
-
-function setup_gl(canvas){
-    width = canvas.width;
-    height = canvas.height;
-    let rect = canvas.getBoundingClientRect();
-    canvas.oncontextmenu = function(e) { e.preventDefault(); e.stopPropagation(); }
-    offset_x = rect.left;
-    offset_y = rect.top;
-    gl = canvas.getContext('webgl');
-    gl.getExtension("OES_texture_float");
-    gl.getExtension("OES_texture_float_linear");
-    gl.enable(gl.DEPTH_TEST);
-    // gl.frontFace(gl.CCW);
-    // gl.enable(gl.CULL_FACE);
-    // gl.cullFace(gl.FRONT);
-    // gl.cullFace(gl.BACK);
-    // gl.enable(gl.BLEND);
-    gl.blendEquation(gl.FUNC_ADD);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-}
-
-function compile_shader(source, type){
-    let shader = gl.createShader(type);
-    gl.shaderSource(shader, global_glsl + source);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)){
-        console.error('Failed to compile shader:', gl.getShaderInfoLog(shader));
-        return;
-    }
-    return shader;
-}
-
-function link_program(vertex_shader, fragment_shader){
-    let program = gl.createProgram();
-    gl.attachShader(program, vertex_shader);
-    gl.attachShader(program, fragment_shader);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)){
-        console.error('Failed to link program:', gl.getProgramInfoLog(program));
-        return;
-    }
-    gl.validateProgram(program);
-    if (!gl.getProgramParameter(program, gl.VALIDATE_STATUS)){
-        console.error('Failed to validate program:', gl.getProgramInfoLog(program));
-        return;
-    }
-    return program;
-}
-
-function create_buffer(data, type, draw_type){
-    buffer = gl.createBuffer();
-    gl.bindBuffer(type, buffer);
-    gl.bufferData(type, data, draw_type);
-    return buffer;
-}
-
-function create_texture(active_texture, color=[0, 0, 0, 1.0], width, height){
-    texture = gl.createTexture();
-    gl.activeTexture(gl.TEXTURE0 + active_texture);
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT);
-    if (color != null){
-        // color = new Uint8Array(Array(width * height).fill(color).flat());
-        color = new Float32Array(Array(width * height).fill(color).flat());
-    }
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.FLOAT, color);
-    return texture;
-}
-
-function create_fbo(texture, width, height){
-    let fbo = gl.createFramebuffer();
-    let depthbuffer = gl.createRenderbuffer();
-    gl.bindRenderbuffer(gl.RENDERBUFFER, depthbuffer);
-    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    // gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthbuffer);
-    return fbo;
-}
-
-function set_uniforms(program){
-    gl.uniform2f(gl.getUniformLocation(program, 'resolution'), width, height);
-    gl.uniform2f(gl.getUniformLocation(program, 'tex_res'), texture_res, texture_res);
-    gl.uniform2f(gl.getUniformLocation(program, 'mouse'), mouse_x, mouse_y);
-    gl.uniform1i(gl.getUniformLocation(program, 'buttons'), buttons);
-    gl.uniformMatrix4fv(gl.getUniformLocation(program, 'M_proj'), gl.False, M_proj);
-    gl.uniformMatrix4fv(gl.getUniformLocation(program, 'M_camera'), gl.False, M_camera);
-    gl.uniform4fv(gl.getUniformLocation(program, 'terrain_color'), terrain_color);
-    gl.uniform4fv(gl.getUniformLocation(program, 'sun_color'), sun_color);
-    gl.uniform3fv(gl.getUniformLocation(program, 'sun_direction'), sun_direction);
-    gl.uniform4fv(gl.getUniformLocation(program, 'water_color'), water_color);
-    gl.uniform1i(gl.getUniformLocation(program, 'frame_i'), frame_i);
-    gl.uniform3f(gl.getUniformLocation(program, 'camera_position'), camera_position[0], camera_position[1], camera_height);
-}
-
-function add_layer(
-        name, program, 
-        vertex_buffer, tri_buffer, n_tris, clear=true, fbo=null,        
-        active_texture=null, texture1=null, texture2=null, blend_alpha=true
-    ){
-    layers.push({
-        name: name,
-        program: program,
-        vertex_buffer: vertex_buffer,
-        tri_buffer: tri_buffer,
-        n_tris: n_tris,
-        fbo: fbo,
-        active_texture: active_texture,
-        sample_texture: texture1,
-        fbo_texture: texture2,
-        clear: clear,
-        blend_alpha: blend_alpha
-    });
-}
-
-function draw_layers(){
-
-    for (i in layers){
-
-        layer = layers[i];
-        
-        // bind buffers
-        gl.bindBuffer(gl.ARRAY_BUFFER, layer.vertex_buffer);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, layer.tri_buffer);
-        let pos_attr_loc = gl.getAttribLocation(layer.program, 'vert_pos');
-        gl.vertexAttribPointer(
-            pos_attr_loc, 2,
-            gl.FLOAT, gl.FALSE,
-            2 * 4, 0
-        );
-        gl.enableVertexAttribArray(pos_attr_loc);
-
-        // setup textures and framebuffer
-        gl.bindFramebuffer(gl.FRAMEBUFFER, layer.fbo);
-        if (layer.sample_texture != null){
-            gl.activeTexture(gl.TEXTURE0 + layer.active_texture);
-            gl.bindTexture(gl.TEXTURE_2D, layer.sample_texture);
-        }
-        if (layer.fbo != null){
-            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, layer.fbo_texture, 0);
-        }
-        
-        // set layer texture uniforms for this program
-        gl.useProgram(layer.program);
-        for (j in layers){
-            l = layers[j];
-            if (l.sample_texture != null){
-                let loc = gl.getUniformLocation(layer.program, l.name);
-                if (loc != null){
-                    gl.uniform1i(loc, l.active_texture);
-                }
-            }
-        }
-
-        // set the rest of the uniforms
-        set_uniforms(layer.program);
-
-        // clear canvas
-        // gl.clearColor(1., 0., 0., 1.);
-        if (layer.clear){
-            gl.clearColor(172 / 255, 214 / 255, 242 / 255, 1);
-            gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
-        }
-
-        // set alpha blend function
-        if (layer.blend_alpha){
-            gl.enable(gl.BLEND);
-        } else {
-            gl.disable(gl.BLEND);
-        }
-
-        // draw
-        gl.drawElements(gl.TRIANGLES, layer.n_tris * 3, gl.UNSIGNED_SHORT, 0);
-
-        // swap textures
-        [layers[i].sample_texture, layers[i].fbo_texture] = [layer.fbo_texture, layer.sample_texture];
-    }
 }
 
 function init(){
@@ -553,68 +286,52 @@ function init(){
         [0, 3, 2]
     ];
 
+    add_uniform('cursor', 'float', 20, true, 5, 40);
+    add_uniform('fog_gamma', 'float', 500);
+    add_uniform('min_water_depth', 'float', 0.2, true, 0, 1);
+    add_uniform('K_sat', 'float', 3, true, 1, 10);
+    add_uniform('K_uptake', 'float', 0.003, true, 0.0, 0.01);
+    add_uniform('cursor_water_level', 'float', 0.002, true, 0.001, 0.1);
+    add_uniform('cursor_elev_level', 'float', 0.1, true, -0.3, 0.3);
+    add_uniform('rain', 'float', 0.0001, true, 0, 0.001);
+    add_uniform('flow_rate', 'float', 0.2, true, 0, 1.0);
+    add_uniform('resolution', 'vec2', [width, height]);
+    add_uniform('tex_res', 'vec2', [texture_res, texture_res]);
+    add_uniform('mouse', 'vec2', [0, 0]);
+    add_uniform('buttons', 'int', 0);
+    add_uniform('M_proj', 'mat4', new Float32Array(16))
+    add_uniform('frame_i', 'int', 0)
+    add_uniform('M_camera', 'mat4', new Float32Array(16));
+    add_uniform('sun_direction', 'vec3', [0.766044443118978, 0, 0.6427876096865393]);
+    add_uniform('sun_color', 'vec4', [0.99, 0.98, 0.83, 1], true);
+    add_uniform('terrain_color', 'vec4', [0, 0.6, 0.1, 1], true);
+    add_uniform('water_color', 'vec4', [0, 0.3, 0.6, 0.7], true);
+    add_uniform('fog_color', 'vec4', [0.75, 0.8, 1.0, 1.0]);
+
     let plane_vert_buffer = create_buffer(new Float32Array(plane_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let plane_tri_buffer = create_buffer(new Uint16Array(plane_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
-    
-    let simple_vertex_shader = compile_shader(simple_vertex_shader_src, gl.VERTEX_SHADER);
-    let display_fragment_shader = compile_shader(display_fragment_shader_src, gl.FRAGMENT_SHADER);
-    let projection_vertex_shader = compile_shader(projection_vertex_shader_src, gl.VERTEX_SHADER);
-    let render_program = link_program(projection_vertex_shader, display_fragment_shader);
-
-    let background_fragment_shader = compile_shader(background_fragment_shader_src, gl.FRAGMENT_SHADER);
-    let background_program = link_program(simple_vertex_shader, background_fragment_shader);
-    let texture0 = create_texture(1, [0., 0., 0., 1.], texture_res, texture_res);
-    let texture1 = create_texture(2, [0., 0., 0., 1.], texture_res, texture_res);
-    let background_fbo = create_fbo(texture1, texture_res, texture_res);
 
     let camera_vert_buffer = create_buffer(new Float32Array(camera_mesh.verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let camera_tri_buffer = create_buffer(new Uint16Array(camera_mesh.tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
-    let camera_vertex_shader = compile_shader(camera_vertex_shader_src, gl.VERTEX_SHADER);
-    let camera_fragment_shader = compile_shader(camera_fragment_shader_src, gl.FRAGMENT_SHADER);
-    let camera_program = link_program(camera_vertex_shader, camera_fragment_shader);
-
-    let water_vertex_shader = compile_shader(water_vertex_shader_src, gl.VERTEX_SHADER);
-    let water_fragment_shader = compile_shader(water_fragment_shader_src, gl.FRAGMENT_SHADER);
-    let water_program = link_program(water_vertex_shader, water_fragment_shader);
-
-    let test_verts = [
-        [-0.5, -0.5],
-        [0.5, -0.5],
-        [0, 0.5],
-    ];
-    let test_tris = [
-        [0, 1, 2],
-    ];
-    let test_vert_buffer = create_buffer(new Float32Array(test_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
-    let test_tri_buffer = create_buffer(new Uint16Array(test_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
-    let test_fragment_shader = compile_shader(test_fragment_shader_src, gl.FRAGMENT_SHADER);
-    let test_program = link_program(simple_vertex_shader, test_fragment_shader);
 
     add_layer(
-        'background_layer', 
-        background_program,
+        'background_layer',
+        simple_vertex_shader_src,
+        background_fragment_shader_src,
         plane_vert_buffer,
         plane_tri_buffer,
         plane_tris.length,
         true,
-        background_fbo,
-        0,
-        texture0, 
-        texture1,
+        create_fbo(texture_res, texture_res),
+        create_texture(texture_res, texture_res),
+        create_texture(texture_res, texture_res),
         false
     );
-    
-    // add_layer(
-    //     'render_layer', 
-    //     render_program, 
-    //     plane_vert_buffer, 
-    //     plane_tri_buffer, 
-    //     plane_tris.length
-    // );
 
     add_layer(
-        'camera_layer',
-        camera_program,
+        'terrain_layer',
+        camera_vertex_shader_src,
+        camera_fragment_shader_src,
         camera_vert_buffer,
         camera_tri_buffer,
         camera_mesh.tris.length,
@@ -623,41 +340,37 @@ function init(){
 
     add_layer(
         'water_layer',
-        water_program,
+        water_vertex_shader_src,
+        water_fragment_shader_src,
         camera_vert_buffer,
         camera_tri_buffer,
         camera_mesh.tris.length,
-        false
-    )
-
-    // add_layer(
-    //     'test_layer',
-    //     test_program,
-    //     test_vert_buffer,
-    //     test_tri_buffer,
-    //     test_tris.length,
-    //     false
-    // );
+        false,
+        null, null, null, 
+        true
+    );
+    
+    compile_layers();
 
     mat4.perspective(M_perpective, glMatrix.toRadian(45), width / height, 0.1, 150.0);
     mat4.lookAt(M_lookat, [0, 0, 0], [1, 0, 0], [0, 0, 1]);
 
     let loop = function(){
-        // document.getElementById('debug').innerText = `${V_position[0].toFixed(3)}, ${V_position[1].toFixed(3)}`
 
-        mat4.rotate(M_proj, M_lookat, glMatrix.toRadian(-rot_pitch), [0, 1, 0]);
-        mat4.rotate(M_proj, M_proj, glMatrix.toRadian(-rot_yaw), [0, 0, 1]);
-        mat4.translate(M_proj, M_proj, [-camera_position[0], -camera_position[1], -camera_height]);
-        mat4.multiply(M_proj, M_perpective, M_proj);
+        mat4.rotate(uniforms['M_proj'], M_lookat, glMatrix.toRadian(-rot_pitch), [0, 1, 0]);
+        mat4.rotate(uniforms['M_proj'], uniforms['M_proj'], glMatrix.toRadian(-rot_yaw), [0, 0, 1]);
+        mat4.translate(uniforms['M_proj'], uniforms['M_proj'], [-camera_position[0], -camera_position[1], -camera_height]);
+        mat4.multiply(uniforms['M_proj'], M_perpective, uniforms['M_proj']);
 
-        mat4.identity(M_camera);
-        mat4.translate(M_camera, M_camera, [camera_position[0], camera_position[1], 0]);
-        mat4.rotate(M_camera, M_camera, glMatrix.toRadian(rot_yaw), [0, 0, 1]);
+        mat4.identity(uniforms['M_camera'].value);
+        mat4.translate(uniforms['M_camera'].value, uniforms['M_camera'].value, [camera_position[0], camera_position[1], 0]);
+        mat4.rotate(uniforms['M_camera'].value, uniforms['M_camera'].value, glMatrix.toRadian(rot_yaw), [0, 0, 1]);
         
+        swap_textures();
         draw_layers();
-        frame_i++;
-        // setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
-        requestAnimationFrame(loop);
+        uniforms['frame_i']++;
+        setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
+        // requestAnimationFrame(loop);
     }
     requestAnimationFrame(loop);
 
