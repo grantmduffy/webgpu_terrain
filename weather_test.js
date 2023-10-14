@@ -18,7 +18,7 @@ void main(){
     vec2 uv = gl_FragCoord.xy / tex_res;
     gl_FragColor = texture2D(feedback_layer, uv);
     gl_FragColor.xyz *= decay_rate;
-    if (length(mouse - gl_FragCoord.xy) < pen){
+    if ((length(mouse - gl_FragCoord.xy) < pen) && (buttons != 0)){
         gl_FragColor = pen_color;
     }
 }
@@ -134,7 +134,7 @@ function create_fbo(width, height){
     return fbo;
 }
 
-function add_uniform(name, type, value, input=false){
+function add_uniform(name, type, value, input=false, min=null, max=null){
     uniforms[name] = {
         'type': type,
         'value': value,
@@ -142,21 +142,43 @@ function add_uniform(name, type, value, input=false){
     };
     global_glsl = global_glsl.concat('\nuniform ', type, ' ', name, ';');
     let inputs_el = document.getElementById('inputs');
+    if (!input) return;
     switch (type){
         case 'vec4':
-            html = `<div class="uniform-input"><label for="${name}">${name}: </label><input type="color" id="${name}" \
-                     onchange="uniforms['${name}'].value = hex2rgba(document.getElementById('${name}').value)"></div>`;
+            html = `<div class="uniform-input"><label for="${name}">${name}: </label><input type="color" id="${name}" onchange="{
+                uniforms['${name}'].value = hex2rgba(document.getElementById('${name}').value);
+                document.getElementById('${name}_value').innerText = uniforms['${name}'].value.map(function(x){return x.toPrecision(2);}).join(', ');
+            }"><label id="${name}_value">${uniforms[name].value}</label></div>`;
             inputs_el.innerHTML = inputs_el.innerHTML.concat(html);
             break;
         case 'float':
-            html = `<div class="uniform-input"><label for="${name}">${name}: </label><input type="number" id="${name}" \
-            onchange="uniforms['${name}'].value = document.getElementById('${name}').value" value="${uniforms[name].value}" step="0.001"></div>`;
-            inputs_el.innerHTML = inputs_el.innerHTML.concat(html);
+            if (min == null){
+                html = `<div class="uniform-input"><label for="${name}">${name}: </label><input type="number" id="${name}" \
+                onchange="uniforms['${name}'].value = parseFloat(document.getElementById('${name}').value)" value="${uniforms[name].value}" step="0.001"></div>`;
+                inputs_el.innerHTML = inputs_el.innerHTML.concat(html);
+            } else {
+                step = (max - min) / 100.0
+                html = `<div class="uniform-input"><label for="${name}">${name}: </label><input type="range" id="${name}" min="${min}" max="${max}" \
+                onchange="{
+                    uniforms['${name}'].value = parseFloat(document.getElementById('${name}').value);
+                    document.getElementById('${name}_value').innerText = uniforms['${name}'].value.toPrecision(2);
+                }" value="${uniforms[name].value}" step="${step}"><div id="${name}_value">${value}</div></div>`;
+                inputs_el.innerHTML = inputs_el.innerHTML.concat(html);
+            }
             break;
         case 'int':
-            html = `<div class="uniform-input"><label for="${name}">${name}: </label><input type="number" id="${name}" \
-            onchange="uniforms['${name}'].value = Math.round(document.getElementById('${name}').value)" value="${uniforms[name].value}" step="1"></div>`;
-            inputs_el.innerHTML = inputs_el.innerHTML.concat(html);
+            if (min == null){
+                html = `<div class="uniform-input"><label for="${name}">${name}: </label><input type="number" id="${name}" \
+                onchange="uniforms['${name}'].value = parseInt(document.getElementById('${name}').value)" value="${uniforms[name].value}" step="1"></div>`;
+                inputs_el.innerHTML = inputs_el.innerHTML.concat(html);
+            } else {
+                html = `<div class="uniform-input"><label for="${name}">${name}: </label><input type="range" id="${name}" min="${min}" max="${max}" \
+                onchange="{
+                    uniforms['${name}'].value = parseInt(document.getElementById('${name}').value);
+                    document.getElementById('${name}_value').innerText = uniforms['${name}'].value.toPrecision(2);
+                }" value="${uniforms[name].value}" step="1"><div id="${name}_value">${value}</div></div>`;
+                inputs_el.innerHTML = inputs_el.innerHTML.concat(html);
+            }
             break;
     }
 }
@@ -324,15 +346,15 @@ function init(){
     add_uniform('buttons', 'int', 0);
     add_uniform('pen_color', 'vec4', [0, 1, 1, 1], true);
     add_uniform('background_color', 'vec4', [0, 1, 1, 1], true);
-    add_uniform('decay_rate', 'float', 0.99, true);
+    add_uniform('decay_rate', 'float', 0.99, true, 0.8, 1);
     
 
     let screen_vs = compile_shader(screen_vs_src, gl.VERTEX_SHADER);
     let rect_vert_buffer = create_buffer(new Float32Array(rect_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let rect_tri_buffer = create_buffer(new Uint16Array(rect_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
-    let tex1 = create_texture(texture_res, texture_res, [1.0, 0.0, 0.0, 1.0]);
+    let tex1 = create_texture(texture_res, texture_res, [0.0, 0.0, 0.0, 1.0]);
     tex1.name = 'tex1';
-    let tex2 = create_texture(texture_res, texture_res, [0.0, 1.0, 0.0, 1.0]);
+    let tex2 = create_texture(texture_res, texture_res, [0.0, 0.0, 0.0, 1.0]);
     tex2.name = 'tex2';
 
     add_layer(
@@ -347,7 +369,7 @@ function init(){
         tex1,
         tex2,
         false,
-        [1., 1., 0., 1.]
+        [0., 0., 0., 1.]
     );
 
     add_layer(
@@ -362,7 +384,7 @@ function init(){
         null,
         null,
         false,
-        [0., 1., 1., 1.]
+        [0., 0., 0., 1.]
     );
 
     compile_layers();
