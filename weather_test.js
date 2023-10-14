@@ -18,8 +18,8 @@ void main(){
     vec2 uv = gl_FragCoord.xy / tex_res;
     gl_FragColor = texture2D(feedback_layer, uv);
     gl_FragColor.xyz *= decay_rate;
-    if ((length(mouse - gl_FragCoord.xy) < pen) && (buttons != 0)){
-        gl_FragColor = pen_color;
+    if ((length(mouse - gl_FragCoord.xy) < pen_size) && (buttons != 0)){
+        gl_FragColor = vec4(1.);
     }
 }
 `
@@ -36,7 +36,6 @@ var width = 0;
 var height = 0;
 var offset_x = 0;
 var offset_y = 0;
-var frame_i = 0;
 const texture_res = 512;
 const fps = 120;
 
@@ -339,22 +338,22 @@ function init(){
         [0, 2, 3]
     ];
 
-    add_uniform('pen', 'float', 30, true);
-    add_uniform('tex_res', 'vec2', [512, 512]);
+    add_uniform('pen_size', 'float', 30, true);
+    add_uniform('tex_res', 'vec2', [width, height]);
     add_uniform('resolution', 'vec2', [width, height]);
     add_uniform('mouse', 'vec2', [0, 0]);
     add_uniform('buttons', 'int', 0);
-    add_uniform('pen_color', 'vec4', [0, 1, 1, 1], true);
     add_uniform('background_color', 'vec4', [0, 1, 1, 1], true);
     add_uniform('decay_rate', 'float', 0.99, true, 0.8, 1);
+    add_uniform('frame_i', 'int', 0);
     
 
     let screen_vs = compile_shader(screen_vs_src, gl.VERTEX_SHADER);
     let rect_vert_buffer = create_buffer(new Float32Array(rect_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let rect_tri_buffer = create_buffer(new Uint16Array(rect_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
-    let tex1 = create_texture(texture_res, texture_res, [0.0, 0.0, 0.0, 1.0]);
+    let tex1 = create_texture(width, height, [0.0, 0.0, 0.0, 1.0]);
     tex1.name = 'tex1';
-    let tex2 = create_texture(texture_res, texture_res, [0.0, 0.0, 0.0, 1.0]);
+    let tex2 = create_texture(width, height, [0.0, 0.0, 0.0, 1.0]);
     tex2.name = 'tex2';
 
     add_layer(
@@ -365,7 +364,7 @@ function init(){
         rect_tri_buffer,
         rect_tris.length,
         true,
-        create_fbo(texture_res, texture_res),
+        create_fbo(width, height),
         tex1,
         tex2,
         false,
@@ -393,7 +392,7 @@ function init(){
         swap_textures();
         draw_layers();
         setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
-        // requestAnimationFrame(loop);
+        uniforms['frame_i'].value++;
     }
     requestAnimationFrame(loop);
 
