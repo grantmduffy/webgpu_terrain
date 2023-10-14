@@ -2,6 +2,25 @@
 
 <html>
   <head>
+
+<style>
+
+#inputs {
+  display: flex;
+  flex-direction: column;
+}
+
+.uniform-input {
+  display: flex;
+  flex-direction: row;
+}
+
+label, input {
+  margin: 4px;
+}
+
+</style>
+
     <meta charset="utf-8">
     <title>WebGL Test Page</title>
   </head>
@@ -19,5 +38,6 @@
     <script src="circle_mesh.js"></script>
     <script src="gl-matrix-min.js"></script>
     <script src="weather_test.js"></script>
+    <div id="inputs"></div>
   </body>
 </html>

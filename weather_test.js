@@ -17,9 +17,9 @@ let feedback_fs_src = `
 void main(){
     vec2 uv = gl_FragCoord.xy / tex_res;
     gl_FragColor = texture2D(feedback_layer, uv);
-    gl_FragColor.xyz *= 0.95;
+    gl_FragColor.xyz *= decay_rate;
     if (length(mouse - gl_FragCoord.xy) < pen){
-        gl_FragColor = vec4(0., 1., 1., 1.);
+        gl_FragColor = pen_color;
     }
 }
 `
@@ -31,9 +31,6 @@ void main(){
 }
 `
 
-var mouse_x = 0;
-var mouse_y = 0;
-var buttons = 0;
 var gl = null;
 var width = 0;
 var height = 0;
@@ -50,6 +47,11 @@ function mouse_move(event){
     uniforms['mouse'].value[0] = event.clientX - offset_x;
     uniforms['mouse'].value[1] = event.srcElement.height - event.clientY + offset_y;
     uniforms['buttons'].value = event.buttons;
+}
+
+function hex2rgba(x){
+    x = Number('0x' + x.slice(1));
+    return [((x >> 16) & 0xff) / 255.0, ((x >> 8) & 0xff) / 255.0, (x & 0xff) / 255.0, 1.0];
 }
 
 function setup_gl(canvas){
@@ -139,6 +141,24 @@ function add_uniform(name, type, value, input=false){
         'input': input
     };
     global_glsl = global_glsl.concat('\nuniform ', type, ' ', name, ';');
+    let inputs_el = document.getElementById('inputs');
+    switch (type){
+        case 'vec4':
+            html = `<div class="uniform-input"><label for="${name}">${name}: </label><input type="color" id="${name}" \
+                     onchange="uniforms['${name}'].value = hex2rgba(document.getElementById('${name}').value)"></div>`;
+            inputs_el.innerHTML = inputs_el.innerHTML.concat(html);
+            break;
+        case 'float':
+            html = `<div class="uniform-input"><label for="${name}">${name}: </label><input type="number" id="${name}" \
+            onchange="uniforms['${name}'].value = document.getElementById('${name}').value" value="${uniforms[name].value}" step="0.001"></div>`;
+            inputs_el.innerHTML = inputs_el.innerHTML.concat(html);
+            break;
+        case 'int':
+            html = `<div class="uniform-input"><label for="${name}">${name}: </label><input type="number" id="${name}" \
+            onchange="uniforms['${name}'].value = Math.round(document.getElementById('${name}').value)" value="${uniforms[name].value}" step="1"></div>`;
+            inputs_el.innerHTML = inputs_el.innerHTML.concat(html);
+            break;
+    }
 }
 
 function set_uniforms(program){
@@ -302,6 +322,10 @@ function init(){
     add_uniform('resolution', 'vec2', [width, height]);
     add_uniform('mouse', 'vec2', [0, 0]);
     add_uniform('buttons', 'int', 0);
+    add_uniform('pen_color', 'vec4', [0, 1, 1, 1], true);
+    add_uniform('background_color', 'vec4', [0, 1, 1, 1], true);
+    add_uniform('decay_rate', 'float', 0.99, true);
+    
 
     let screen_vs = compile_shader(screen_vs_src, gl.VERTEX_SHADER);
     let rect_vert_buffer = create_buffer(new Float32Array(rect_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
