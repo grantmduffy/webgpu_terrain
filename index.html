@@ -7,7 +7,7 @@
   </head>
   <body onload="init();">
     <div><canvas 
-        width="400" height="300" id="gl-canvas" 
+        width="800" height="600" id="gl-canvas" 
         onmousemove="mouse_move(event);" 
         onmousedown="mouse_move(event);"
         onmouseup="mouse_move(event);"
@@ -15,7 +15,9 @@
         onmouseenter="mouse_move(event);"
     ></canvas></div>
     <a id="debug"></a>
-    <div id="inputs"></div>
+    <div id="inputs" style="overflow-y: auto; height: 200px;">
+      <h1>Settings</h1>
+    </div>
 
     <script src="gl_layers.js"></script>
     <script src="circle_mesh.js"></script>
