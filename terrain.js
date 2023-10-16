@@ -95,6 +95,10 @@ attribute vec2 vert_pos;
 varying vec2 uv;
 
 void main(){
+
+    // mat4 M_camera = mat4(1.);
+    // mat4 M_proj = mat4(1.);
+
     vec4 world_coords = M_camera * vec4(vert_pos, 0., 1.);
     uv = (world_coords.xy / 100. + 1.) / 2.;
     float elevation = sample(background_layer, uv).x * 1.;
@@ -119,6 +123,8 @@ void main(){
     gl_FragColor *= 1. - fog_amount;
     gl_FragColor += fog_amount * fog_color;
     gl_FragColor.a = 1.;
+
+    // gl_FragColor = vec4(1., 0., 0., 1.);
 }
 
 `;
@@ -141,10 +147,6 @@ void main(){
 let water_fragment_shader_src = `
 varying vec2 uv;
 varying vec3 xyz;
-
-#define water_color vec4(0., 0., 1., 0.5)
-#define sediment_color vec4(1., 0., 0., 1.)
-#define deposition_color vec4(0., 1., 0., 1.)
 
 void main(){
     // [x: elevation, y: water level, z: sediment, w: none]
@@ -194,6 +196,8 @@ void main(){
     float water_amount = b.g;
     // gl_FragColor = vec4(0., 0., b.z * .1, 1.);
     gl_FragColor.a = min(0.5, water_amount * 1.);
+
+    // gl_FragColor = vec4(0., 1., 0., 1.);
 }
 
 `;
@@ -220,14 +224,14 @@ let M_perpective = new Float32Array(16);
 let M_camera = new Float32Array(16);
 var camera_position = [0, 0];
 var rot_horizontal = 0;
-const texture_res = 512;
+const texture_res = 256;
 const fps = 60;
 
 
 function mouse_move(event){
-    mouse_x = event.clientX - offset_x;
-    mouse_y = event.srcElement.height - event.clientY + offset_y;
-    buttons = event.buttons;
+    uniforms['mouse'].value[0] = event.clientX - offset_x;
+    uniforms['mouse'].value[1] = event.srcElement.height - event.clientY + offset_y;
+    uniforms['buttons'].value = event.buttons;
 }
 
 function on_keydown(event){
@@ -286,7 +290,7 @@ function init(){
         [0, 3, 2]
     ];
 
-    add_uniform('cursor', 'float', 20, true, 5, 40);
+    add_uniform('cursor', 'float', 40, true, 5, 100);
     add_uniform('fog_gamma', 'float', 500);
     add_uniform('min_water_depth', 'float', 0.2, true, 0, 1);
     add_uniform('K_sat', 'float', 3, true, 1, 10);
@@ -335,7 +339,8 @@ function init(){
         camera_vert_buffer,
         camera_tri_buffer,
         camera_mesh.tris.length,
-        true
+        true, null, null, null, false, 
+        uniforms['fog_color'].value
     );
 
     add_layer(
@@ -346,7 +351,7 @@ function init(){
         camera_tri_buffer,
         camera_mesh.tris.length,
         false,
-        null, null, null, 
+        null, null, null,
         true
     );
     
@@ -357,10 +362,10 @@ function init(){
 
     let loop = function(){
 
-        mat4.rotate(uniforms['M_proj'], M_lookat, glMatrix.toRadian(-rot_pitch), [0, 1, 0]);
-        mat4.rotate(uniforms['M_proj'], uniforms['M_proj'], glMatrix.toRadian(-rot_yaw), [0, 0, 1]);
-        mat4.translate(uniforms['M_proj'], uniforms['M_proj'], [-camera_position[0], -camera_position[1], -camera_height]);
-        mat4.multiply(uniforms['M_proj'], M_perpective, uniforms['M_proj']);
+        mat4.rotate(uniforms['M_proj'].value, M_lookat, glMatrix.toRadian(-rot_pitch), [0, 1, 0]);
+        mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian(-rot_yaw), [0, 0, 1]);
+        mat4.translate(uniforms['M_proj'].value, uniforms['M_proj'].value, [-camera_position[0], -camera_position[1], -camera_height]);
+        mat4.multiply(uniforms['M_proj'].value, M_perpective, uniforms['M_proj'].value);
 
         mat4.identity(uniforms['M_camera'].value);
         mat4.translate(uniforms['M_camera'].value, uniforms['M_camera'].value, [camera_position[0], camera_position[1], 0]);
@@ -368,7 +373,7 @@ function init(){
         
         swap_textures();
         draw_layers();
-        uniforms['frame_i']++;
+        uniforms['frame_i'].value++;
         setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
         // requestAnimationFrame(loop);
     }
