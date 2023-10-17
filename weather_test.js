@@ -11,23 +11,31 @@ void main(){
 
 let feedback_fs_src = `
 // [u, v, p, T]
+
+vec4 U, Un, Us, Ue, Uw, Unw, Usw, Une, Use;
+
 void main(){
     vec2 loc = gl_FragCoord.xy / tex_res;
 
     // reverse convection
-    vec4 U = texture2D(feedback_layer, loc);
+    U = texture2D(feedback_layer, loc);
+    Un = texture2D(feedback_layer, loc + vec2(0., 1.) / tex_res);
+    Us = texture2D(feedback_layer, loc + vec2(0., -1.) / tex_res);
+    Ue = texture2D(feedback_layer, loc + vec2(1., 0.) / tex_res);
+    Uw = texture2D(feedback_layer, loc + vec2(-1., 0.) / tex_res);
+    U = (U + Un + Us + Ue + Uw) / 5.;
     loc -= dt * U.xy / tex_res;
 
     // sample neighbors
     U = texture2D(feedback_layer, loc);
-    vec4 Un = texture2D(feedback_layer, loc + vec2(0., 1.) / tex_res);
-    vec4 Us = texture2D(feedback_layer, loc + vec2(0., -1.) / tex_res);
-    vec4 Ue = texture2D(feedback_layer, loc + vec2(1., 0.) / tex_res);
-    vec4 Uw = texture2D(feedback_layer, loc + vec2(-1., 0.) / tex_res);
-    vec4 Unw = texture2D(feedback_layer, loc + vec2(-1., 1.) / tex_res);
-    vec4 Usw = texture2D(feedback_layer, loc + vec2(-1., -1.) / tex_res);
-    vec4 Une = texture2D(feedback_layer, loc + vec2(1., 1.) / tex_res);
-    vec4 Use = texture2D(feedback_layer, loc + vec2(1., -1.) / tex_res);
+    Un = texture2D(feedback_layer, loc + vec2(0., 1.) / tex_res);
+    Us = texture2D(feedback_layer, loc + vec2(0., -1.) / tex_res);
+    Ue = texture2D(feedback_layer, loc + vec2(1., 0.) / tex_res);
+    Uw = texture2D(feedback_layer, loc + vec2(-1., 0.) / tex_res);
+    Unw = texture2D(feedback_layer, loc + vec2(-1., 1.) / tex_res);
+    Usw = texture2D(feedback_layer, loc + vec2(-1., -1.) / tex_res);
+    Une = texture2D(feedback_layer, loc + vec2(1., 1.) / tex_res);
+    Use = texture2D(feedback_layer, loc + vec2(1., -1.) / tex_res);
 
     // accumulate pressure
     U.z += 0.5 * Uw.x + 0.25 * Unw.x + 0.25 * Usw.x - 0.5 * Ue.x - 0.25 * Une.x - 0.25 * Use.x
