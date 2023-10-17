@@ -224,7 +224,7 @@ let M_perpective = new Float32Array(16);
 let M_camera = new Float32Array(16);
 var camera_position = [0, 0];
 var rot_horizontal = 0;
-const texture_res = 256;
+const texture_res = 512;  // TODO: figure out why resolution can't excede canvas
 const fps = 60;
 
 
