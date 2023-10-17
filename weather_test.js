@@ -10,20 +10,47 @@ void main(){
 `;
 
 let feedback_fs_src = `
+// [u, v, p, T]
 void main(){
-    vec2 uv = gl_FragCoord.xy / tex_res;
-    gl_FragColor = texture2D(feedback_layer, uv);
-    gl_FragColor.xyz *= decay_rate;
+    vec2 loc = gl_FragCoord.xy / tex_res;
+
+    // reverse convection
+    vec4 U = texture2D(feedback_layer, loc);
+    loc -= dt * U.xy / tex_res;
+
+    // sample neighbors
+    U = texture2D(feedback_layer, loc);
+    vec4 Un = texture2D(feedback_layer, loc + vec2(0., 1.) / tex_res);
+    vec4 Us = texture2D(feedback_layer, loc + vec2(0., -1.) / tex_res);
+    vec4 Ue = texture2D(feedback_layer, loc + vec2(1., 0.) / tex_res);
+    vec4 Uw = texture2D(feedback_layer, loc + vec2(-1., 0.) / tex_res);
+    vec4 Unw = texture2D(feedback_layer, loc + vec2(-1., 1.) / tex_res);
+    vec4 Usw = texture2D(feedback_layer, loc + vec2(-1., -1.) / tex_res);
+    vec4 Une = texture2D(feedback_layer, loc + vec2(1., 1.) / tex_res);
+    vec4 Use = texture2D(feedback_layer, loc + vec2(1., -1.) / tex_res);
+
+    // accumulate pressure
+    U.z += 0.5 * Uw.x + 0.25 * Unw.x + 0.25 * Usw.x - 0.5 * Ue.x - 0.25 * Une.x - 0.25 * Use.x
+    + 0.5 * Us.y + 0.25 * Usw.y + 0.25 * Use.y - 0.5 * Un.y - 0.25 * Unw.y - 0.25 * Une.y;
+
+    U.z = U.z / 9. + Unw.z / 9. + Uw.z / 9. + Usw.z / 9. + Un.z / 9. + Us.z / 9. + Une.z / 9. + Ue.z / 9. + Use.z / 9.;
+
+    // add pressure gradient
+    U.xy += 1.0 * vec2(Uw.z - Ue.z, Us.z - Un.z);
+    
+    gl_FragColor = U;
+
     if ((length(mouse - gl_FragCoord.xy) < pen_size) && (buttons != 0)){
-        gl_FragColor = pen_color;
+        gl_FragColor = vec4(0., 0.0, U.z, 1.);
     }
 }
 `
 
 let display_fs_src = `
 void main(){
-    vec2 uv = gl_FragCoord.xy / resolution;
-    gl_FragColor = texture2D(feedback_layer, uv);
+    vec2 loc = gl_FragCoord.xy / tex_res;
+    vec4 U = texture2D(feedback_layer, loc);
+    gl_FragColor = vec4(vec3(U.w), 1.);
 }
 `
 
@@ -63,14 +90,15 @@ function init(){
     add_uniform('mouse', 'vec2', [0, 0]);
     add_uniform('buttons', 'int', 0);
     add_uniform('pen_color', 'vec4', [0, 1, 1, 1], true);
-    add_uniform('decay_rate', 'float', 0.99, true, 0.8, 1);
+    add_uniform('decay_rate', 'float', 0.99, true, 0, 1);
     add_uniform('frame_i', 'int', 0);
+    add_uniform('dt', 'float', 1.0, true, 0.1, 100);
     
     let rect_vert_buffer = create_buffer(new Float32Array(rect_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let rect_tri_buffer = create_buffer(new Uint16Array(rect_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
-    let tex1 = create_texture(width, height, [0.0, 0.0, 0.0, 1.0]);
+    let tex1 = create_texture(width, height, [1.0, 0.0, 0.0, 0.0]);
     tex1.name = 'tex1';
-    let tex2 = create_texture(width, height, [0.0, 0.0, 0.0, 1.0]);
+    let tex2 = create_texture(width, height, [1.0, 0.0, 0.0, 0.0]);
     tex2.name = 'tex2';
 
     add_layer(
@@ -91,11 +119,11 @@ function init(){
     add_layer(
         'display_layer',
         screen_vs_src,
-        feedback_fs_src,
+        display_fs_src,
         rect_vert_buffer,
         rect_tri_buffer,
         rect_tris.length,
-        false,
+        true,
         null,
         null,
         null,
