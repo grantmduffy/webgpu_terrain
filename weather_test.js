@@ -37,6 +37,9 @@ void main(){
     Une = texture2D(feedback_layer, loc + vec2(1., 1.) / tex_res);
     Use = texture2D(feedback_layer, loc + vec2(1., -1.) / tex_res);
 
+    // smooth pressure
+    U.z = 0.25 * Uw.z + 0.25 * Un.z + 0.25 * Us.z + 0.25 * Ue.z;
+
     // accumulate pressure
     U.z += 0.5 * Uw.x + 0.25 * Unw.x + 0.25 * Usw.x - 0.5 * Ue.x - 0.25 * Une.x - 0.25 * Use.x
     + 0.5 * Us.y + 0.25 * Usw.y + 0.25 * Use.y - 0.5 * Un.y - 0.25 * Unw.y - 0.25 * Une.y;
@@ -83,6 +86,8 @@ let display_fs_src = `
 void main(){
     vec2 loc = gl_FragCoord.xy / tex_res;
     gl_FragColor = texture2D(color_layer, loc);
+    // gl_FragColor = texture2D(feedback_layer, loc);
+    // gl_FragColor.a = 1.;
 }
 `;
 
