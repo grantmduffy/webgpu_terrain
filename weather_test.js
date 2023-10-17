@@ -48,19 +48,43 @@ void main(){
     
     gl_FragColor = U;
 
+    // pen
     if ((length(mouse - gl_FragCoord.xy) < pen_size) && (buttons != 0)){
         gl_FragColor = vec4(0., 0.0, U.z, 1.);
     }
 }
-`
+`;
+
+let color_fs_src = `
+vec4 U, Un, Us, Ue, Uw, Unw, Usw, Une, Use;
+
+void main(){
+    vec2 loc = gl_FragCoord.xy / tex_res;
+
+    // reverse convection
+    U = texture2D(feedback_layer, loc);
+    Un = texture2D(feedback_layer, loc + vec2(0., 1.) / tex_res);
+    Us = texture2D(feedback_layer, loc + vec2(0., -1.) / tex_res);
+    Ue = texture2D(feedback_layer, loc + vec2(1., 0.) / tex_res);
+    Uw = texture2D(feedback_layer, loc + vec2(-1., 0.) / tex_res);
+    U = (U + Un + Us + Ue + Uw) / 5.;
+    loc -= dt * U.xy / tex_res;
+    
+    gl_FragColor = texture2D(color_layer, loc);
+    
+    // pen
+    if ((length(mouse - gl_FragCoord.xy) < pen_size) && (buttons != 0)){
+        gl_FragColor = pen_color;
+    }
+}
+`;
 
 let display_fs_src = `
 void main(){
     vec2 loc = gl_FragCoord.xy / tex_res;
-    vec4 U = texture2D(feedback_layer, loc);
-    gl_FragColor = vec4(vec3(U.w), 1.);
+    gl_FragColor = texture2D(color_layer, loc);
 }
-`
+`;
 
 var width = 0;
 var height = 0;
@@ -98,16 +122,16 @@ function init(){
     add_uniform('mouse', 'vec2', [0, 0]);
     add_uniform('buttons', 'int', 0);
     add_uniform('pen_color', 'vec4', [0, 1, 1, 1], true);
-    add_uniform('decay_rate', 'float', 0.99, true, 0, 1);
     add_uniform('frame_i', 'int', 0);
-    add_uniform('dt', 'float', 1.0, true, 0.1, 100);
+    add_uniform('dt', 'float', 1.0, true, 0.1, 2);
     
     let rect_vert_buffer = create_buffer(new Float32Array(rect_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let rect_tri_buffer = create_buffer(new Uint16Array(rect_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
     let tex1 = create_texture(width, height, [1.0, 0.0, 0.0, 0.0]);
-    tex1.name = 'tex1';
     let tex2 = create_texture(width, height, [1.0, 0.0, 0.0, 0.0]);
-    tex2.name = 'tex2';
+    
+    let c_tex1 = create_texture(width, height, [0.0, 0.0, 0.0, 1.0]);
+    let c_tex2 = create_texture(width, height, [0.0, 0.0, 0.0, 1.0]);
 
     add_layer(
         'feedback_layer',
@@ -120,6 +144,21 @@ function init(){
         create_fbo(width, height),
         tex1,
         tex2,
+        false,
+        [0., 0., 0., 1.]
+    );
+
+    add_layer(
+        'color_layer',
+        screen_vs_src,
+        color_fs_src,
+        rect_vert_buffer,
+        rect_tri_buffer,
+        rect_tris.length,
+        true,
+        create_fbo(width, height),
+        c_tex1,
+        c_tex2,
         false,
         [0., 0., 0., 1.]
     );
