@@ -1,32 +1,13 @@
 <!doctype html>
 
-<html>
+<html onkeydown="on_keydown(event)">
   <head>
-
-<style>
-
-#inputs {
-  display: flex;
-  flex-direction: column;
-}
-
-.uniform-input {
-  display: flex;
-  flex-direction: row;
-}
-
-label, input {
-  margin: 4px;
-}
-
-</style>
-
     <meta charset="utf-8">
     <title>WebGL Test Page</title>
   </head>
   <body onload="init();">
     <div><canvas 
-        width="512" height="512" id="gl-canvas" 
+        width="800" height="600" id="gl-canvas" 
         onmousemove="mouse_move(event);" 
         onmousedown="mouse_move(event);"
         onmouseup="mouse_move(event);"
@@ -34,10 +15,14 @@ label, input {
         onmouseenter="mouse_move(event);"
     ></canvas></div>
     <a id="debug"></a>
+    <div id="inputs" style="overflow-y: auto; height: 200px;">
+      <h1>Settings</h1>
+    </div>
+
     <script src="gl_layers.js"></script>
     <script src="circle_mesh.js"></script>
     <script src="gl-matrix-min.js"></script>
-    <script src="weather_test.js"></script>
-    <div id="inputs"></div>
+    <script src="terrain.js"></script>
+
   </body>
 </html>
