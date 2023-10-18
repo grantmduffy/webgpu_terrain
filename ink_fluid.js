@@ -121,7 +121,7 @@ function init(){
         [0, 2, 3]
     ];
 
-    add_uniform('pen_size', 'float', 30, true);
+    add_uniform('pen_size', 'float', 30, true, 0, 50);
     add_uniform('tex_res', 'vec2', [width, height]);
     add_uniform('resolution', 'vec2', [width, height]);
     add_uniform('mouse', 'vec2', [0, 0]);
