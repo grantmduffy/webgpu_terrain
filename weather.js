@@ -9,86 +9,42 @@ void main(){
 }
 `;
 
-let feedback_fs_src = `
-#pragma glslify: frag
-// [u, v, p, T]
-
-vec4 U, Un, Us, Ue, Uw, Unw, Usw, Une, Use;
-
+let surface_fs_src = `
+// [Z,  w,  s,  Ts?]
 void main(){
     vec2 loc = gl_FragCoord.xy / tex_res;
-
-    // reverse convection
-    U = texture2D(feedback_layer, loc);
-    Un = texture2D(feedback_layer, loc + vec2(0., 1.) / tex_res);
-    Us = texture2D(feedback_layer, loc + vec2(0., -1.) / tex_res);
-    Ue = texture2D(feedback_layer, loc + vec2(1., 0.) / tex_res);
-    Uw = texture2D(feedback_layer, loc + vec2(-1., 0.) / tex_res);
-    U = (U + Un + Us + Ue + Uw) / 5.;
-    loc -= dt * U.xy / tex_res;
-
-    // sample neighbors
-    U = texture2D(feedback_layer, loc);
-    Un = texture2D(feedback_layer, loc + vec2(0., 1.) / tex_res);
-    Us = texture2D(feedback_layer, loc + vec2(0., -1.) / tex_res);
-    Ue = texture2D(feedback_layer, loc + vec2(1., 0.) / tex_res);
-    Uw = texture2D(feedback_layer, loc + vec2(-1., 0.) / tex_res);
-    Unw = texture2D(feedback_layer, loc + vec2(-1., 1.) / tex_res);
-    Usw = texture2D(feedback_layer, loc + vec2(-1., -1.) / tex_res);
-    Une = texture2D(feedback_layer, loc + vec2(1., 1.) / tex_res);
-    Use = texture2D(feedback_layer, loc + vec2(1., -1.) / tex_res);
-
-    // smooth pressure
-    U.z = 0.25 * Uw.z + 0.25 * Un.z + 0.25 * Us.z + 0.25 * Ue.z;
-
-    // accumulate pressure
-    U.z += 0.5 * Uw.x + 0.25 * Unw.x + 0.25 * Usw.x - 0.5 * Ue.x - 0.25 * Une.x - 0.25 * Use.x
-    + 0.5 * Us.y + 0.25 * Usw.y + 0.25 * Use.y - 0.5 * Un.y - 0.25 * Unw.y - 0.25 * Une.y;
-
-    U.z = U.z / 9. + Unw.z / 9. + Uw.z / 9. + Usw.z / 9. + Un.z / 9. + Us.z / 9. + Une.z / 9. + Ue.z / 9. + Use.z / 9.;
-
-    // add pressure gradient
-    U.xy += 1.0 * vec2(Uw.z - Ue.z, Us.z - Un.z);
-    
-    gl_FragColor = U;
-
-    // pen
-    if ((length(mouse - gl_FragCoord.xy) < pen_size) && (buttons != 0)){
-        gl_FragColor = vec4(0., 0.0, U.z, 1.);
-    }
+    gl_FragColor = texture2D(surface_layer, loc);
 }
 `;
 
-let color_fs_src = `
-vec4 U, Un, Us, Ue, Uw, Unw, Usw, Une, Use;
-
+let velocity_fs_src = `
+// [Ul, Vl, Uh, Vh ]
 void main(){
     vec2 loc = gl_FragCoord.xy / tex_res;
+    gl_FragColor = texture2D(velocity_layer, loc);
+}
+`;
 
-    // reverse convection
-    U = texture2D(feedback_layer, loc);
-    Un = texture2D(feedback_layer, loc + vec2(0., 1.) / tex_res);
-    Us = texture2D(feedback_layer, loc + vec2(0., -1.) / tex_res);
-    Ue = texture2D(feedback_layer, loc + vec2(1., 0.) / tex_res);
-    Uw = texture2D(feedback_layer, loc + vec2(-1., 0.) / tex_res);
-    U = (U + Un + Us + Ue + Uw) / 5.;
-    loc -= dt * U.xy / tex_res;
-    
-    gl_FragColor = texture2D(color_layer, loc);
-    
-    // pen
-    if ((length(mouse - gl_FragCoord.xy) < pen_size) && (buttons != 0)){
-        gl_FragColor = pen_color;
-    }
+let vapor_fs_src = `
+// [Tl, Hl, Th, Hh ]
+void main(){
+    vec2 loc = gl_FragCoord.xy / tex_res;
+    gl_FragColor = texture2D(vapor_layer, loc);
+}
+`;
+
+let pressure_fs_src = `
+// [Pl, Ph, W,  ?  ]
+void main(){
+    vec2 loc = gl_FragCoord.xy / tex_res;
+    gl_FragColor = texture2D(pressure_layer, loc);
 }
 `;
 
 let display_fs_src = `
 void main(){
     vec2 loc = gl_FragCoord.xy / tex_res;
-    gl_FragColor = texture2D(color_layer, loc);
-    // gl_FragColor = texture2D(feedback_layer, loc);
-    // gl_FragColor.a = 1.;
+    gl_FragColor = texture2D(pressure_layer, loc);
 }
 `;
 
@@ -187,40 +143,65 @@ function init(){
     
     let rect_vert_buffer = create_buffer(new Float32Array(rect_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let rect_tri_buffer = create_buffer(new Uint16Array(rect_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
-    let tex1 = create_texture(width, height, [1.0, 0.0, 0.0, 0.0]);
-    let tex2 = create_texture(width, height, [1.0, 0.0, 0.0, 0.0]);
     
-    let c_tex1 = create_texture(width, height, [0.0, 0.0, 0.0, 1.0]);
-    let c_tex2 = create_texture(width, height, [0.0, 0.0, 0.0, 1.0]);
-
     add_layer(
-        'feedback_layer',
+        'surface_layer',
         screen_vs_src,
-        feedback_fs_src,
+        surface_fs_src,
         rect_vert_buffer,
         rect_tri_buffer,
         rect_tris.length,
         true,
         create_fbo(width, height),
-        tex1,
-        tex2,
+        create_texture(width, height, [1.0, 0.0, 0.0, 0.0]),
+        create_texture(width, height, [1.0, 0.0, 0.0, 0.0]),
         false,
-        [0., 0., 0., 1.]
+        [0., 0., 0., 0.]
     );
 
     add_layer(
-        'color_layer',
+        'velocity_layer',
         screen_vs_src,
-        color_fs_src,
+        velocity_fs_src,
         rect_vert_buffer,
         rect_tri_buffer,
         rect_tris.length,
         true,
         create_fbo(width, height),
-        c_tex1,
-        c_tex2,
+        create_texture(width, height, [1.0, 0.0, 0.0, 0.0]),
+        create_texture(width, height, [1.0, 0.0, 0.0, 0.0]),
         false,
-        [0., 0., 0., 1.]
+        [0., 0., 0., 0.]
+    );
+
+    add_layer(
+        'vapor_layer',
+        screen_vs_src,
+        vapor_fs_src,
+        rect_vert_buffer,
+        rect_tri_buffer,
+        rect_tris.length,
+        true,
+        create_fbo(width, height),
+        create_texture(width, height, [1.0, 0.0, 0.0, 0.0]),
+        create_texture(width, height, [1.0, 0.0, 0.0, 0.0]),
+        false,
+        [0., 0., 0., 0.]
+    );
+
+    add_layer(
+        'pressure_layer',
+        screen_vs_src,
+        pressure_fs_src,
+        rect_vert_buffer,
+        rect_tri_buffer,
+        rect_tris.length,
+        true,
+        create_fbo(width, height),
+        create_texture(width, height, [1.0, 0.0, 0.0, 0.0]),
+        create_texture(width, height, [1.0, 0.0, 0.0, 0.0]),
+        false,
+        [0., 0., 0., 0.]
     );
 
     add_layer(
