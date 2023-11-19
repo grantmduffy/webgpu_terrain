@@ -162,10 +162,15 @@ function load_data(buffer){
     let range = new Float32Array(buffer.slice(4, 12));
     let size = new Float32Array(buffer.slice(12, 20))
     let img_data = new Float32Array(buffer.slice(20));
+    let img_data_rgba = new Float32Array(img_data.length * 4);
+    for (i = 0; i < img_data.length; i++){
+        img_data_rgba[i * 4] = img_data[i];
+        img_data_rgba[i * 4 + 3] = 1.0;
+    }
     uniforms['print_width'].value = size[0];
     uniforms['print_height'].value = size[1];
     uniforms['elev_range'].value = range;
-    create_texture(shape[1], shape[0], img_data, elevation_texture_offset);
+    create_texture(shape[1], shape[0], img_data_rgba, elevation_texture_offset);
     console.log(`new elevation data loaded (${shape[0]}x${shape[1]})`);
 }
 
