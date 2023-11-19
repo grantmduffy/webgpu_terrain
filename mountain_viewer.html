@@ -1,0 +1,29 @@
+<!doctype html>
+
+<html>
+<head>
+    <script src="gl_layers.js"></script>
+    <script src="gl-matrix-min.js"></script>
+    <script src="mountain_viewer.js"></script>
+</head>
+
+<body onload="init()">
+
+<canvas
+    style="background-color: black;"
+    width="800" height="600" id="gl-canvas"
+    onmousemove="mouse_move(event);" 
+    onmousedown="mouse_move(event);"
+    onmouseup="mouse_move(event);"
+    onmouseleave="mouse_move(event);"
+    onmouseenter="mouse_move(event);"
+></canvas>
+
+<div id="inputs" style="overflow-y: auto; height: 200px;">
+    <h2>Settings</h2>
+</div>
+
+</body>
+
+</html>
+
