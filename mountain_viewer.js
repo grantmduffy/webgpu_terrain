@@ -146,21 +146,37 @@ function mouse_move(event){
 }
 
 
+function load_file(event){
+    let file = event.target.files[0];
+    console.log(file);
+    let file_reader = new FileReader();
+    file_reader.addEventListener('load', (event) =>{
+        load_data(event.target.result);
+    });
+    file_reader.readAsArrayBuffer(file);
+}
+
+
+function load_data(buffer){
+    let shape = new Uint16Array(buffer.slice(0, 4));
+    let range = new Float32Array(buffer.slice(4, 12));
+    let size = new Float32Array(buffer.slice(12, 20))
+    let img_data = new Float32Array(buffer.slice(20));
+    uniforms['print_width'].value = size[0];
+    uniforms['print_height'].value = size[1];
+    uniforms['elev_range'].value = range;
+    create_texture(shape[1], shape[0], img_data, elevation_texture_offset);
+    console.log(`new elevation data loaded (${shape[0]}x${shape[1]})`);
+}
+
+
 function get_elev_data(){
     let req = new XMLHttpRequest();
     req.open('GET', '/orders/' + example_order + '/elevation');
     req.responseType = 'arraybuffer';
     req.onreadystatechange = function(){
         if (this.readyState == 4 && this.status == 200){
-            let shape = new Uint16Array(req.response.slice(0, 4));
-            let range = new Float32Array(req.response.slice(4, 12));
-            let size = new Float32Array(req.response.slice(12, 20))
-            let img_data = new Float32Array(req.response.slice(20));
-            uniforms['print_width'].value = size[0];
-            uniforms['print_height'].value = size[1];
-            uniforms['elev_range'].value = range;
-            create_texture(shape[1], shape[0], img_data, elevation_texture_offset);
-            console.log('new data');
+            load_data(req.response);
         }
     }
     req.send();
