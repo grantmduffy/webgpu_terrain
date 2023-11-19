@@ -175,18 +175,6 @@ function load_data(buffer){
 }
 
 
-function get_elev_data(){
-    let req = new XMLHttpRequest();
-    req.open('GET', '/orders/' + example_order + '/elevation');
-    req.responseType = 'arraybuffer';
-    req.onreadystatechange = function(){
-        if (this.readyState == 4 && this.status == 200){
-            load_data(req.response);
-        }
-    }
-    req.send();
-}
-
 function get_mesh(width, height, n_width, n_height){
     let verts = [];
     for (var j = 0; j < n_width; j++){
