@@ -74,56 +74,6 @@ void main(){
 }
 `;
 
-let debug_vs_src = `
-// attribute vec2 vert_pos;
-
-// void main(){
-//     gl_Position = vec4(vert_pos, 0., 1.);
-// }
-
-attribute vec2 vert_pos;
-varying vec2 uv;
-varying vec4 uv_sun;
-
-void main(){
-    uv = vert_pos + 0.5;
-    vec4 world_coord = vec4(
-        vert_pos * vec2(print_width, print_height), 
-        texture2D(elevation, uv).x - (elev_range.y + elev_range.x) / 2.,
-        1.
-    );
-    gl_Position = M_proj * world_coord;
-    uv_sun = (M_proj_sun * world_coord) / 2. + 0.5;
-    // uv_sun = M_proj_sun * world_coord;
-}
-`;
-
-let debug_fs_src = `
-varying vec2 uv;
-varying vec4 uv_sun;
-
-void main(){
-    // vec2 uv = gl_FragCoord.xy / sun_res;  // Not sure why...
-    vec4 e = texture2D(elevation, uv);
-    vec4 sun = texture2D(sun_layer, uv_sun.xy * canvas_res / sun_res);
-    if (uv_sun.z - eps < sun.g){
-        gl_FragColor = vec4(1.0);
-    } else {
-        gl_FragColor = vec4(1., 0., 0., 1.);
-    }
-    
-    // gl_FragColor = vec4(sun.g - uv_sun.z, 0., 0., 1.);
-    
-    
-    // gl_FragColor = texture2D(sun_layer, uv_sun.xy * canvas_res / sun_res);
-    // gl_FragColor = vec4(uv_sun.xy, 1., 1.);
-    // gl_FragColor.r = 1.;
-    // gl_FragColor = vec4(uv_sun.xy, 1., 1.);
-    // vec2 uv = gl_FragCoord.xy / canvas_res;
-    // gl_FragColor = vec4(e.y, 0., 0., 1.);
-}
-`;
-
 let fps = 60;
 var rect_tris, rect_verts;
 var camera_dist = 100.;
@@ -230,10 +180,7 @@ function init(){
 
     mat4.ortho(M_ortho, -ortho_fov, ortho_fov, -ortho_fov, ortho_fov, 0., ortho_depth);
     mat4.perspective(M_perpective, glMatrix.toRadian(45), canvas.width / canvas.height, 0.1, 300.0);
-    // mat4.translate(M_ortho, M_ortho, [0, 0, -100]);
-    // mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian(-uniforms['mouse'].value[1] * 90 / canvas.height), [1, 0, 0]);
-    // mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian((uniforms['mouse'].value[0] - 0.5) * 360 / canvas.width), [0, 0, 1]);
-
+    
     add_uniform('elevation', 'sampler2D', elevation_texture_offset);
     add_uniform('canvas_res', 'vec2', [canvas.width, canvas.height])
     add_uniform('sun_res', 'vec2', [sun_res, sun_res]);
@@ -254,9 +201,7 @@ function init(){
 
     let rect_vert_buffer = create_buffer(new Float32Array(rect_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let rect_tri_buffer = create_buffer(new Uint16Array(rect_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
-    let debug_vert_buffer = create_buffer(new Float32Array(screen_mesh[0].flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
-    let debug_tri_buffer = create_buffer(new Uint16Array(screen_mesh[1].flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
-
+    
     add_layer(
         'sun_layer',
         sun_vs_src,
@@ -270,19 +215,6 @@ function init(){
         create_texture(sun_res, sun_res, [0., 1., 0., 1.]),
         false
     );
-
-    // add_layer(
-    //     'debug_layer',
-    //     debug_vs_src,
-    //     debug_fs_src,
-    //     rect_vert_buffer,
-    //     rect_tri_buffer,
-    //     rect_tris.length,
-    //     // debug_vert_buffer,
-    //     // debug_tri_buffer,
-    //     // screen_mesh[1].length,
-    //     true
-    // );
 
     add_layer(
         'camera_layer',
