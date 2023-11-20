@@ -54,7 +54,7 @@ void main(){
     vec4 e_e = texture2D(elevation, uv + vec2(eps, 0.));
     vec4 e_w = texture2D(elevation, uv + vec2(-eps, 0.));
 
-    float curvature = clamp(0.01 * (e_n.x + e_s.x + e_e.x + e_w.x - 4. * e.x) / eps, -1., 1.);
+    float curvature = clamp(0.01 * (e_n.x + e_s.x + e_e.x + e_w.x - 4. * e.x) / eps, 0., 1.);
     
     vec3 norm = vec3(
         (e_w.x - e_e.x) / (2. * eps * print_width),
@@ -191,13 +191,15 @@ function init(){
     add_uniform('M_sun', 'mat4', new Float32Array(16));
     add_uniform('mouse', 'vec2', [0, 0]);
     add_uniform('buttons', 'int', 0);
-    add_uniform('sun_color', 'vec4', [0.99, 0.98, 0.83, 1], true);
-    add_uniform('ambient_color', 'vec4', [0.18, 0.27, 0.33, 1.0], true);
+    add_uniform('ortho_depth', 'float', ortho_depth);
+    add_uniform('elev_range', 'vec2', [0, 1]);
+
+    // editable uniforms
     add_uniform('sun_direction', 'float', 30., true, 0., 360.);
     add_uniform('sun_elevation', 'float', 15., true, 0., 90.);
+    add_uniform('sun_color', 'vec4', [0.99, 0.98, 0.83, 1], true);
+    add_uniform('ambient_color', 'vec4', [0.18, 0.27, 0.33, 1.0], true);
     add_uniform('ambient_occlusion', 'float', 0.15, true, 0., 1.);
-    add_uniform('elev_range', 'vec2', [0, 1]);
-    add_uniform('ortho_depth', 'float', ortho_depth);
 
     let rect_vert_buffer = create_buffer(new Float32Array(rect_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let rect_tri_buffer = create_buffer(new Uint16Array(rect_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
