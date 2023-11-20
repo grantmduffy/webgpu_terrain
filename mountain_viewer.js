@@ -133,16 +133,31 @@ let sun_res = 2048;
 let elevation_texture_offset = 7;
 let ortho_fov = 100.;
 let ortho_depth = 500.;
+var mouse_down_pos = [0, 0];
+var mouse_pos = [0, 0];
+var mouse_is_down = false;
 
 
 function mouse_move(event){
-    if ('mouse' in uniforms){
-        uniforms['mouse'].value[0] = event.offsetX;
-        uniforms['mouse'].value[1] = event.srcElement.height - event.offsetY;    
+    if ('mouse' in uniforms && mouse_is_down){
+        uniforms['mouse'].value[0] = event.offsetX - mouse_down_pos[0] + mouse_pos[0];
+        uniforms['mouse'].value[1] = (event.srcElement.height - event.offsetY) - mouse_down_pos[1] + mouse_pos[1];    
     }
     if ('buttons' in uniforms){
         uniforms['buttons'].value = event.buttons;
     }
+}
+
+function mouse_down(event){
+    mouse_is_down = true;
+    mouse_down_pos[0] = event.offsetX;
+    mouse_down_pos[1] = event.srcElement.height - event.offsetY;
+}
+
+function mouse_up(event){
+    mouse_is_down = false;
+    mouse_pos[0] = uniforms['mouse'].value[0];
+    mouse_pos[1] = uniforms['mouse'].value[1];
 }
 
 
@@ -152,6 +167,11 @@ function load_file(event){
     let file_reader = new FileReader();
     file_reader.addEventListener('load', (event) =>{
         load_data(event.target.result);
+        let w = uniforms['print_width'].value;
+        let h = uniforms['print_height'].value;
+        ortho_fov = ((w ** 2 + h ** 2) ** 0.5) / 2.0;
+        console.log(ortho_fov);
+        mat4.ortho(M_ortho, -ortho_fov, ortho_fov, -ortho_fov, ortho_fov, 0., ortho_depth);
     });
     file_reader.readAsArrayBuffer(file);
 }
@@ -298,7 +318,5 @@ function init(){
 
     }
     requestAnimationFrame(loop);
-
-    get_elev_data();
 
 }
