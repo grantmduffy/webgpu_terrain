@@ -88,10 +88,23 @@ var mouse_pos = [0, 0];
 var mouse_is_down = false;
 
 
+function get_event_xy(event){
+    var event_x, event_y;
+    if (event.type.startsWith('mouse')){
+        event_x = event.offsetX;
+        event_y = event.offsetY;
+    } else {
+        event_x = event.touches[0].clientX;
+        event_y = event.touches[0].clientY;
+    }
+    return [event_x, event_y];
+}
+
 function mouse_move(event){
+    var [event_x, event_y] = get_event_xy(event);
     if ('mouse' in uniforms && mouse_is_down){
-        uniforms['mouse'].value[0] = event.offsetX - mouse_down_pos[0] + mouse_pos[0];
-        uniforms['mouse'].value[1] = (event.srcElement.height - event.offsetY) - mouse_down_pos[1] + mouse_pos[1];    
+        uniforms['mouse'].value[0] = event_x - mouse_down_pos[0] + mouse_pos[0];
+        uniforms['mouse'].value[1] = (event.srcElement.height - event_y) - mouse_down_pos[1] + mouse_pos[1];    
     }
     if ('buttons' in uniforms){
         uniforms['buttons'].value = event.buttons;
@@ -99,9 +112,10 @@ function mouse_move(event){
 }
 
 function mouse_down(event){
+    var [event_x, event_y] = get_event_xy(event);
     mouse_is_down = true;
-    mouse_down_pos[0] = event.offsetX;
-    mouse_down_pos[1] = event.srcElement.height - event.offsetY;
+    mouse_down_pos[0] = event_x;
+    mouse_down_pos[1] = event.srcElement.height - event_y;
 }
 
 function mouse_up(event){
