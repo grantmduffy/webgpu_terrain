@@ -1,6 +1,8 @@
 global_glsl += `
 #define eps 0.001
 #define pi 3.1495
+#define N_AMBIENT_OCCLUSION 8
+#define min_ao_eps 0.0001
 `;
 
 let sun_vs_src = `
@@ -57,8 +59,6 @@ void main(){
     vec4 e_s = texture2D(elevation, uv + vec2(0., -eps));
     vec4 e_e = texture2D(elevation, uv + vec2(eps, 0.));
     vec4 e_w = texture2D(elevation, uv + vec2(-eps, 0.));
-
-    float curvature = clamp(0.01 * (e_n.x + e_s.x + e_e.x + e_w.x - 4. * e.x) / eps, 0., 1.);
     
     vec3 norm = vec3(
         (e_w.x - e_e.x) / (2. * eps * print_width),
@@ -74,9 +74,18 @@ void main(){
         rgb_intensity += sun_color.rgb * sun_intensity * clamp(dot(norm, sun_vector.xyz), 0., 1.);
     }
     
-    rgb_intensity *= exp(-curvature * ambient_occlusion);
+    for (int i = 0; i < N_AMBIENT_OCCLUSION; i++){
+        float ao_eps = min_ao_eps * exp(float(i));
+        e_n = texture2D(elevation, uv + vec2(0., ao_eps));
+        e_s = texture2D(elevation, uv + vec2(0., -ao_eps));
+        e_e = texture2D(elevation, uv + vec2(ao_eps, 0.));
+        e_w = texture2D(elevation, uv + vec2(-ao_eps, 0.));
+        float curvature = clamp(0.01 * (e_n.x + e_s.x + e_e.x + e_w.x - 4. * e.x) / (ao_eps), 0., 100.);
+        rgb_intensity *= exp(-curvature * ambient_occlusion);
+    }
     
     gl_FragColor = convert_colorspace(rgb_intensity);
+    gl_FragColor.rgb = pow(gl_FragColor.rgb, vec3(gamma));
 }
 `;
 
@@ -218,11 +227,12 @@ function init(){
     add_uniform('sun_direction', 'float', 30., true, 0., 360.);
     add_uniform('sun_elevation', 'float', 15., true, 0., 90.);
     add_uniform('sun_color', 'vec4', [1.0, 0.88, 0.54, 1.0], true);
-    add_uniform('sun_intensity', 'float', 3., true, 0., 5.);
-    add_uniform('ambient_color', 'vec4', [0.46, 0.69, 1.0, 1.0], true);
+    add_uniform('sun_intensity', 'float', 1.7, true, 0., 5.);
+    add_uniform('ambient_color', 'vec4', [0.56, 0.75, 1.0, 1.0], true);
     add_uniform('ambient_intensity', 'float', .55, true, 0., 2.);
-    add_uniform('ambient_occlusion', 'float', 0.25, true, 0., 1.);
-    add_uniform('exposure', 'float', 1.0, true, 0., 10.);
+    add_uniform('exposure', 'float', 2.2, true, 0., 10.);
+    add_uniform('ambient_occlusion', 'float', 0.035, true, 0., 0.2);
+    add_uniform('gamma', 'float', 2.0, true, 0.0, 5.0);
 
     let rect_vert_buffer = create_buffer(new Float32Array(rect_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let rect_tri_buffer = create_buffer(new Uint16Array(rect_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
