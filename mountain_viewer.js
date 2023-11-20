@@ -47,6 +47,10 @@ let camera_fs_src = `
 varying vec2 uv;
 varying vec4 uv_sun;
 
+vec4 convert_colorspace(vec3 intensity){
+    return vec4(1. - exp(-exposure * intensity), 1.);
+}
+
 void main(){
     vec4 e = texture2D(elevation, uv);
     vec4 e_n = texture2D(elevation, uv + vec2(0., eps));
@@ -62,15 +66,17 @@ void main(){
         1.
     );
     vec4 sun_vector = M_sun * vec4(0., 0., 1., 1.);
-    float sun_intensity = clamp(dot(norm, sun_vector.xyz), 0., 1.);
+    
+    vec3 rgb_intensity = ambient_intensity * ambient_color.rgb;
 
     // shadow map
-    if (uv_sun.z - eps > texture2D(sun_layer, uv_sun.xy * canvas_res / sun_res).g){
-        sun_intensity = 0.;
+    if (uv_sun.z - eps < texture2D(sun_layer, uv_sun.xy * canvas_res / sun_res).g){
+        rgb_intensity += sun_color.rgb * sun_intensity * clamp(dot(norm, sun_vector.xyz), 0., 1.);
     }
     
-    gl_FragColor = vec4(sun_intensity * sun_color.rgb + (1. - sun_intensity) * ambient_color.rgb, 1.);
-    gl_FragColor.xyz *= exp(-curvature * ambient_occlusion);
+    rgb_intensity *= exp(-curvature * ambient_occlusion);
+    
+    gl_FragColor = convert_colorspace(rgb_intensity);
 }
 `;
 
@@ -131,11 +137,11 @@ function load_file(event){
     let file_reader = new FileReader();
     file_reader.addEventListener('load', (event) =>{
         load_data(event.target.result);
-        let w = uniforms['print_width'].value;
-        let h = uniforms['print_height'].value;
-        ortho_fov = ((w ** 2 + h ** 2) ** 0.5) / 2.0;
-        console.log(ortho_fov);
-        mat4.ortho(M_ortho, -ortho_fov, ortho_fov, -ortho_fov, ortho_fov, 0., ortho_depth);
+        // TODO: figure out why this isn't working
+        // let w = uniforms['print_width'].value;
+        // let h = uniforms['print_height'].value;
+        // ortho_fov = ((w ** 2 + h ** 2) ** 0.5) / 2.0;
+        // mat4.ortho(M_ortho, -ortho_fov, ortho_fov, -ortho_fov, ortho_fov, 0., ortho_depth);
     });
     file_reader.readAsArrayBuffer(file);
 }
@@ -211,9 +217,12 @@ function init(){
     // editable uniforms
     add_uniform('sun_direction', 'float', 30., true, 0., 360.);
     add_uniform('sun_elevation', 'float', 15., true, 0., 90.);
-    add_uniform('sun_color', 'vec4', [0.99, 0.98, 0.83, 1], true);
-    add_uniform('ambient_color', 'vec4', [0.18, 0.27, 0.33, 1.0], true);
-    add_uniform('ambient_occlusion', 'float', 0.15, true, 0., 1.);
+    add_uniform('sun_color', 'vec4', [1.0, 0.88, 0.54, 1.0], true);
+    add_uniform('sun_intensity', 'float', 3., true, 0., 5.);
+    add_uniform('ambient_color', 'vec4', [0.46, 0.69, 1.0, 1.0], true);
+    add_uniform('ambient_intensity', 'float', .55, true, 0., 2.);
+    add_uniform('ambient_occlusion', 'float', 0.25, true, 0., 1.);
+    add_uniform('exposure', 'float', 1.0, true, 0., 10.);
 
     let rect_vert_buffer = create_buffer(new Float32Array(rect_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let rect_tri_buffer = create_buffer(new Uint16Array(rect_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
