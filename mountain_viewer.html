@@ -12,14 +12,18 @@
 <canvas
     style="background-color: black;"
     width="800" height="600" id="gl-canvas"
-    onmousedown="mouse_down(event);"
-    onmouseup="mouse_up(event)"
-    onmouseout="mouse_up(event)"
+    
+    onmousedown="mouse_down(event);mouse_move(event);"
+    ontouchstart="mouse_down(event);mouse_move(event);"
+    
     onmousemove="mouse_move(event);" 
-    onmousedown="mouse_move(event);"
-    onmouseup="mouse_move(event);"
+    ontouchmove="mouse_move(event);"
+
+    onmouseup="mouse_up(event);"
+    ontouchend="mouse_up(event);"
+    onmouseout="mouse_up(event);"
     onmouseleave="mouse_move(event);"
-    onmouseenter="mouse_move(event);"
+
 ></canvas>
 
 <input type="file" id="file-selector" accept=".gmd" onchange="load_file(event)">
