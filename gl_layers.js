@@ -6,6 +6,22 @@ var gl = null;
 var layers = [];
 var uniforms = {};
 
+let screen_mesh = [
+
+[
+    [-1, -1],
+    [1, -1],
+    [1, 1],
+    [-1, 1]
+],
+
+[
+    [0, 1, 2],
+    [0, 2, 3]
+]
+
+];
+
 
 function hex2rgba(x){
     x = Number('0x' + x.slice(1));
@@ -72,15 +88,20 @@ function create_buffer(data, type, draw_type){
     return buffer;
 }
 
-function create_texture(width, height, color=[0, 0, 0, 1.0]){
+function create_texture(width, height, color=[0, 0, 0, 1.0], offset=0, edge='clamp'){
     texture = gl.createTexture();
-    gl.activeTexture(gl.TEXTURE0);  // use texture 0 temporarily
+    gl.activeTexture(gl.TEXTURE0 + offset);  // use texture 0 temporarily
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
-    if (color != null){
+    if (edge == 'repeat'){
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+    } else if (edge == 'clamp'){
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    }
+    if (color != null && Array.isArray(color)){
         color = new Float32Array(Array(width * height).fill(color).flat());
     }
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.FLOAT, color);
@@ -95,6 +116,13 @@ function create_fbo(width, height){
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthbuffer);
     return fbo;
+}
+
+function download_texture(){
+    // TODO: get working
+    let buffer = new Float32Array(width * height * 4);
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, buffer);
+    return buffer;
 }
 
 function add_uniform(name, type, value, input=false, min=null, max=null){
@@ -117,12 +145,12 @@ function add_uniform(name, type, value, input=false, min=null, max=null){
         case 'float':
             if (min == null){
                 html = `<div class="uniform-input"><label for="${name}">${name}: </label><input type="number" id="${name}" \
-                onchange="uniforms['${name}'].value = parseFloat(document.getElementById('${name}').value)" value="${uniforms[name].value}" step="0.001"></div>`;
+                oninput="uniforms['${name}'].value = parseFloat(document.getElementById('${name}').value)" value="${uniforms[name].value}" step="0.001"></div>`;
                 inputs_el.innerHTML = inputs_el.innerHTML.concat(html);
             } else {
                 step = (max - min) / 100.0
                 html = `<div class="uniform-input"><label for="${name}">${name}: </label><input type="range" id="${name}" min="${min}" max="${max}" \
-                onchange="{
+                oninput="{
                     uniforms['${name}'].value = parseFloat(document.getElementById('${name}').value);
                     document.getElementById('${name}_value').innerText = uniforms['${name}'].value.toPrecision(2);
                 }" value="${uniforms[name].value}" step="${step}"><div id="${name}_value">${value}</div></div>`;
@@ -132,11 +160,11 @@ function add_uniform(name, type, value, input=false, min=null, max=null){
         case 'int':
             if (min == null){
                 html = `<div class="uniform-input"><label for="${name}">${name}: </label><input type="number" id="${name}" \
-                onchange="uniforms['${name}'].value = parseInt(document.getElementById('${name}').value)" value="${uniforms[name].value}" step="1"></div>`;
+                oninput="uniforms['${name}'].value = parseInt(document.getElementById('${name}').value)" value="${uniforms[name].value}" step="1"></div>`;
                 inputs_el.innerHTML = inputs_el.innerHTML.concat(html);
             } else {
                 html = `<div class="uniform-input"><label for="${name}">${name}: </label><input type="range" id="${name}" min="${min}" max="${max}" \
-                onchange="{
+                oninput="{
                     uniforms['${name}'].value = parseInt(document.getElementById('${name}').value);
                     document.getElementById('${name}_value').innerText = uniforms['${name}'].value.toPrecision(2);
                 }" value="${uniforms[name].value}" step="1"><div id="${name}_value">${value}</div></div>`;
@@ -181,8 +209,8 @@ function set_uniforms(program){
 }
 
 function add_layer(
-        name, vertex_shader_src, fragment_shader_src, 
-        vertex_buffer, tri_buffer, n_tris, clear=true, fbo=null,        
+        name, vertex_shader_src, fragment_shader_src,
+        vertex_buffer, tri_buffer, n_tris, clear=true, fbo=null,
         texture1=null, texture2=null, blend_alpha=true, clear_color=[0.5, 0.5, 0.5, 1.0]
     ){
     // let active_texture = (fbo == null) ? null : layers.length;
@@ -224,7 +252,7 @@ function compile_layers(){
 function swap_textures(l){
     for (let i = 0; i < layers.length; i++){
         let layer = layers[i];
-        
+
         // swap textures
         [layers[i].sample_texture, layers[i].fbo_texture] = [layer.fbo_texture, layer.sample_texture];
 
@@ -242,7 +270,7 @@ function draw_layers(){
     for (let i = 0; i < layers.length; i++){
 
         let layer = layers[i];
-        
+
         // bind buffers
         gl.bindBuffer(gl.ARRAY_BUFFER, layer.vertex_buffer);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, layer.tri_buffer);
@@ -253,10 +281,10 @@ function draw_layers(){
             2 * 4, 0
         );
         gl.enableVertexAttribArray(pos_attr_loc);
-        
+
         gl.useProgram(layer.program);
         set_uniforms(layer.program);
-        
+
         // set alpha blend function
         if (layer.blend_alpha){
             gl.enable(gl.BLEND);
@@ -268,7 +296,7 @@ function draw_layers(){
         gl.bindFramebuffer(gl.FRAMEBUFFER, layer.fbo);
         if (layer.fbo != null){
             gl.framebufferTexture2D(
-                gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, 
+                gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
                 gl.TEXTURE_2D, layer.fbo_texture, 0
             );
         }
@@ -279,7 +307,7 @@ function draw_layers(){
             gl.clearColor(...layer.clear_color);
             gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
         }
-        
+
         // draw
         gl.drawElements(gl.TRIANGLES, layer.n_tris * 3, gl.UNSIGNED_SHORT, 0);
 
