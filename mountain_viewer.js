@@ -229,10 +229,10 @@ function load_data(buffer){
     let size = new Float32Array(buffer.slice(12, 20))
     let img_data_compressed = new Uint8Array(buffer.slice(20));
     let img_data_decompressed = pako.inflate(img_data_compressed);
-    let img_data = new Float32Array(img_data_decompressed.buffer);
+    let img_data = new Uint16Array(img_data_decompressed.buffer);
     let img_data_rgba = new Float32Array(img_data.length * 4);
     for (i = 0; i < img_data.length; i++){
-        img_data_rgba[i * 4] = img_data[i];
+        img_data_rgba[i * 4] = (range[1] - range[0]) * img_data[i] / (2 ** 16 - 1) + range[0];
         img_data_rgba[i * 4 + 3] = 1.0;
     }
     uniforms['print_width'].value = size[0];
