@@ -411,7 +411,7 @@ function init(){
     )
 
     compile_layers();
-    load_url('/rainier.gmd');
+    load_url('rainier.gmd');
 
     let loop = function(){
         draw_layers();
