@@ -210,6 +210,19 @@ function load_file(event){
 }
 
 
+function load_url(path){
+    let req = new XMLHttpRequest();
+    req.open('GET', path);
+    req.responseType = 'arraybuffer';
+    req.onreadystatechange = function(){
+        if (this.readyState == 4 && this.status == 200){
+            load_data(req.response);
+        }
+    }
+    req.send();
+}
+
+
 function load_data(buffer){
     let shape = new Uint16Array(buffer.slice(0, 4));
     let range = new Float32Array(buffer.slice(4, 12));
@@ -398,6 +411,7 @@ function init(){
     )
 
     compile_layers();
+    load_url('/rainier.gmd');
 
     let loop = function(){
         draw_layers();
