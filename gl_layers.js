@@ -140,38 +140,38 @@ function add_uniform(name, type, value, input=false, min=null, max=null){
     if (!input) return;
     switch (type){
         case 'vec4':
-            html = `<div class="uniform-input"><label for="${name}">${name}: </label><input type="color" id="${name}" onchange="{
+            html = `<div class="uniform-input row"><label class="uniform-label col-sm" for="${name}">${name}: </label><input class="uniform-color col-md" type="color" id="${name}" onchange="{
                 uniforms['${name}'].value = hex2rgba(document.getElementById('${name}').value);
                 document.getElementById('${name}_value').innerText = uniforms['${name}'].value.map(function(x){return x.toPrecision(2);}).join(', ');
-            }" value="${rgba2hex(value)}"><label id="${name}_value">${uniforms[name].value}</label></div>`;
+            }" value="${rgba2hex(value)}"><label id="${name}_value" class="col-sm">${uniforms[name].value}</label></div>`;
             inputs_el.innerHTML = inputs_el.innerHTML.concat(html);
             break;
         case 'float':
             if (min == null){
-                html = `<div class="uniform-input"><label for="${name}">${name}: </label><input type="number" id="${name}" \
+                html = `<div class="uniform-input row"><label class="uniform-label col-sm" for="${name}">${name}: </label><input class="uniform-float col-md" type="number" id="${name}" \
                 oninput="uniforms['${name}'].value = parseFloat(document.getElementById('${name}').value)" value="${uniforms[name].value}" step="0.001"></div>`;
                 inputs_el.innerHTML = inputs_el.innerHTML.concat(html);
             } else {
                 step = (max - min) / 100.0
-                html = `<div class="uniform-input"><label for="${name}">${name}: </label><input type="range" id="${name}" min="${min}" max="${max}" \
+                html = `<div class="uniform-input row"><label class="uniform-label col-sm" for="${name}">${name}: </label><input class="uniform-float col-md" type="range" id="${name}" min="${min}" max="${max}" \
                 oninput="{
                     uniforms['${name}'].value = parseFloat(document.getElementById('${name}').value);
                     document.getElementById('${name}_value').innerText = uniforms['${name}'].value.toPrecision(2);
-                }" value="${uniforms[name].value}" step="${step}"><div id="${name}_value">${value}</div></div>`;
+                }" value="${uniforms[name].value}" step="${step}"><div id="${name}_value" class="col-sm">${value}</div></div>`;
                 inputs_el.innerHTML = inputs_el.innerHTML.concat(html);
             }
             break;
         case 'int':
             if (min == null){
-                html = `<div class="uniform-input"><label for="${name}">${name}: </label><input type="number" id="${name}" \
+                html = `<div class="uniform-input"><label class="uniform-label col-sm" for="${name}">${name}: </label><input class="uniform-int col-md" type="number" id="${name}" \
                 oninput="uniforms['${name}'].value = parseInt(document.getElementById('${name}').value)" value="${uniforms[name].value}" step="1"></div>`;
                 inputs_el.innerHTML = inputs_el.innerHTML.concat(html);
             } else {
-                html = `<div class="uniform-input"><label for="${name}">${name}: </label><input type="range" id="${name}" min="${min}" max="${max}" \
+                html = `<div class="uniform-input"><label class="uniform-label col-sm" for="${name}">${name}: </label><input class="uniform-int col-md" type="range" id="${name}" min="${min}" max="${max}" \
                 oninput="{
                     uniforms['${name}'].value = parseInt(document.getElementById('${name}').value);
                     document.getElementById('${name}_value').innerText = uniforms['${name}'].value.toPrecision(2);
-                }" value="${uniforms[name].value}" step="1"><div id="${name}_value">${value}</div></div>`;
+                }" value="${uniforms[name].value}" step="1"><div id="${name}_value" class="col-sm">${value}</div></div>`;
                 inputs_el.innerHTML = inputs_el.innerHTML.concat(html);
             }
             break;
