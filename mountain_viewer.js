@@ -214,9 +214,10 @@ function load_data(buffer){
     let shape = new Uint16Array(buffer.slice(0, 4));
     let range = new Float32Array(buffer.slice(4, 12));
     let size = new Float32Array(buffer.slice(12, 20))
-    let img_data = new Float32Array(buffer.slice(20));
+    let img_data_compressed = new Uint8Array(buffer.slice(20));
+    let img_data_decompressed = pako.inflate(img_data_compressed);
+    let img_data = new Float32Array(img_data_decompressed.buffer);
     let img_data_rgba = new Float32Array(img_data.length * 4);
-    console.log(range);
     for (i = 0; i < img_data.length; i++){
         img_data_rgba[i * 4] = img_data[i];
         img_data_rgba[i * 4 + 3] = 1.0;
@@ -227,8 +228,6 @@ function load_data(buffer){
     let [w, h] = size;
     m = [-w / 2, -h / 2, 0, 1, w / 2, -h / 2, 0, 1, w / 2, h / 2, 0, 1, -w / 2, h / 2, 0, 1];
     for (var i = 0; i < 16; i++) M_corners[i] = m[i];
-    // mat4.transpose(M_corners, M_corners);
-    console.log(M_corners);
     create_texture(shape[1], shape[0], img_data_rgba, elevation_texture_offset);
     console.log(`new elevation data loaded (${shape[0]}x${shape[1]})`);
 }
