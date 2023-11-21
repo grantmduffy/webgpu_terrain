@@ -2,7 +2,7 @@ global_glsl += `
 #define eps 0.001
 #define pi 3.1495
 #define N_AMBIENT_OCCLUSION 8
-#define N_SHADOW 4
+#define N_SHADOW 8
 #define min_ao_eps 0.0001
 `;
 
@@ -72,15 +72,15 @@ void main(){
 
     // shadow map
     float shadow_depth = texture2D(sun_layer, uv_sun.xy * canvas_res / sun_res).g - uv_sun.z + eps;
-    float shadow_val = float(shadow_depth > 0.);
+    float shadow_val = float(N_SHADOW) * float(shadow_depth > 0.);
     for (int i = 0; i < N_SHADOW; i++){
-        float sd_n = float(texture2D(sun_layer, uv_sun.xy * canvas_res / sun_res + vec2(0., eps * shadow_softness * shadow_depth * float(i))).g - uv_sun.z + eps > 0.);
-        float sd_s = float(texture2D(sun_layer, uv_sun.xy * canvas_res / sun_res + vec2(0., -eps * shadow_softness * shadow_depth * float(i))).g - uv_sun.z + eps > 0.);
-        float sd_e = float(texture2D(sun_layer, uv_sun.xy * canvas_res / sun_res + vec2(eps * shadow_softness * shadow_depth * float(i), 0.)).g - uv_sun.z + eps > 0.);
-        float sd_w = float(texture2D(sun_layer, uv_sun.xy * canvas_res / sun_res + vec2(-eps * shadow_softness * shadow_depth * float(i), 0.)).g - uv_sun.z + eps > 0.);
+        float sd_n = float(N_SHADOW - i - 1) * float(texture2D(sun_layer, uv_sun.xy * canvas_res / sun_res + vec2(0., eps * shadow_softness * 1. * float(i))).g - uv_sun.z + eps > 0.);
+        float sd_s = float(N_SHADOW - i - 1) * float(texture2D(sun_layer, uv_sun.xy * canvas_res / sun_res + vec2(0., -eps * shadow_softness * 1. * float(i))).g - uv_sun.z + eps > 0.);
+        float sd_e = float(N_SHADOW - i - 1) * float(texture2D(sun_layer, uv_sun.xy * canvas_res / sun_res + vec2(eps * shadow_softness * 1. * float(i), 0.)).g - uv_sun.z + eps > 0.);
+        float sd_w = float(N_SHADOW - i - 1) * float(texture2D(sun_layer, uv_sun.xy * canvas_res / sun_res + vec2(-eps * shadow_softness * 1. * float(i), 0.)).g - uv_sun.z + eps > 0.);
         shadow_val += sd_n + sd_s + sd_e + sd_w;    
     }
-    shadow_val /= float(N_SHADOW) * 4. + 1.;
+    shadow_val /= float(N_SHADOW * (2 * N_SHADOW - 1));
     rgb_intensity += shadow_val * sun_color.rgb * sun_intensity * clamp(dot(norm, sun_vector.xyz), 0., 1.);
     
     // calculate ambient occlusion
@@ -90,7 +90,7 @@ void main(){
         e_s = texture2D(elevation, uv + vec2(0., -ao_eps));
         e_e = texture2D(elevation, uv + vec2(ao_eps, 0.));
         e_w = texture2D(elevation, uv + vec2(-ao_eps, 0.));
-        float curvature = clamp(0.01 * (e_n.x + e_s.x + e_e.x + e_w.x - 4. * e.x) / (ao_eps), 0., 100.);
+        float curvature = clamp(0.01 * (e_n.x + e_s.x + e_e.x + e_w.x - 4. * e.x) / (ao_eps), 0., max_occlusion);
         rgb_intensity *= exp(-curvature * ambient_occlusion);
     }
     
@@ -352,10 +352,11 @@ function init(){
     add_uniform('ambient_color', 'vec4', [0.56, 0.75, 1.0, 1.0], true);
     add_uniform('ambient_intensity', 'float', .55, true, 0., 2.);
     add_uniform('exposure', 'float', 2.2, true, 0., 10.);
-    add_uniform('ambient_occlusion', 'float', 0.035, true, 0., 0.2);
+    add_uniform('ambient_occlusion', 'float', 0.025, true, 0., 0.2);
     add_uniform('gamma', 'float', 2.0, true, 0.0, 5.0);
     add_uniform('base_thickness', 'float', 8., true, 0., 30.);
-    add_uniform('shadow_softness', 'float', 25., true, 0., 100.);
+    add_uniform('shadow_softness', 'float', 0.5, true, 0., 1.);
+    add_uniform('max_occlusion', 'float', 10., true, 0., 20.);
 
     let rect_vert_buffer = create_buffer(new Float32Array(rect_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let rect_tri_buffer = create_buffer(new Uint16Array(rect_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
