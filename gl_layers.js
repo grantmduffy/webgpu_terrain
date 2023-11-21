@@ -32,7 +32,7 @@ function rgba2hex(vals){
     return '#' + vals.slice(0, -1).map(function(x){return Math.round(x * 255).toString(16).padStart(2, '0')}).join('');
 }
 
-function setup_gl(canvas){
+function setup_gl(canvas, cull=null, depth_test=true){
     width = canvas.width;
     height = canvas.height;
     let rect = canvas.getBoundingClientRect();
@@ -42,12 +42,16 @@ function setup_gl(canvas){
     gl = canvas.getContext('webgl');
     gl.getExtension("OES_texture_float");
     gl.getExtension("OES_texture_float_linear");
-    gl.enable(gl.DEPTH_TEST);
-    // gl.frontFace(gl.CCW);
-    // gl.enable(gl.CULL_FACE);
-    // gl.cullFace(gl.FRONT);
-    // gl.cullFace(gl.BACK);
-    // gl.enable(gl.BLEND);
+    if (depth_test) gl.enable(gl.DEPTH_TEST);
+    if (cull != null){
+        gl.enable(gl.CULL_FACE);
+        gl.frontFace(gl.CW);
+        if (cull == 'front'){
+            gl.cullFace(gl.FRONT);
+        } else {
+            gl.cullFace(gl.BACK);
+        }
+    }
     gl.blendEquation(gl.FUNC_ADD);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 }
@@ -211,7 +215,8 @@ function set_uniforms(program){
 function add_layer(
         name, vertex_shader_src, fragment_shader_src,
         vertex_buffer, tri_buffer, n_tris, clear=true, fbo=null,
-        texture1=null, texture2=null, blend_alpha=true, clear_color=[0.5, 0.5, 0.5, 1.0]
+        texture1=null, texture2=null, blend_alpha=true, clear_color=[0.5, 0.5, 0.5, 1.0],
+        dims=2, attributes=[],
     ){
     // let active_texture = (fbo == null) ? null : layers.length;
     layers.push({
@@ -221,6 +226,8 @@ function add_layer(
         vertex_buffer: vertex_buffer,
         tri_buffer: tri_buffer,
         n_tris: n_tris,
+        dims: dims,
+        attributes: attributes,
         fbo: fbo,
         // active_texture: active_texture,
         sample_texture: texture1,
@@ -275,13 +282,31 @@ function draw_layers(){
         gl.bindBuffer(gl.ARRAY_BUFFER, layer.vertex_buffer);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, layer.tri_buffer);
         let pos_attr_loc = gl.getAttribLocation(layer.program, 'vert_pos');
+        var ptr_offset = 0;
+        var stride = layer.dims * 4;
+        for (var j = 0; j < layer.attributes.length; j++){
+            stride += layer.attributes[j][1] * 4;
+        };
         gl.vertexAttribPointer(
-            pos_attr_loc, 2,
+            pos_attr_loc, layer.dims,
             gl.FLOAT, gl.FALSE,
-            2 * 4, 0
+            stride, ptr_offset
         );
         gl.enableVertexAttribArray(pos_attr_loc);
-
+        ptr_offset += layer.dims * 4;
+        for (var j = 0; j < layer.attributes.length; j++){
+            let [name, dims] = layer.attributes[j];
+            let attr_loc = gl.getAttribLocation(layer.program, name);
+            gl.vertexAttribPointer(
+                attr_loc, dims,
+                gl.FLOAT, gl.FALSE,
+                stride, 
+                ptr_offset
+            );
+            ptr_offset += dims * 4;
+            gl.enableVertexAttribArray(attr_loc);
+        }
+        
         gl.useProgram(layer.program);
         set_uniforms(layer.program);
 
