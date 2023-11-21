@@ -145,6 +145,9 @@ var rect_tris, rect_verts;
 var camera_dist = 100.;
 let M_perpective = new Float32Array(16);
 let M_ortho = new Float32Array(16);
+let M_corners = new Float32Array(16);
+let M_corners_proj = new Float32Array(16);
+let M_sun_inv = new Float32Array(16);
 let sun_res = 2048;
 let elevation_texture_offset = 7;
 let ortho_fov = 100.;
@@ -221,6 +224,11 @@ function load_data(buffer){
     uniforms['print_width'].value = size[0];
     uniforms['print_height'].value = size[1];
     uniforms['elev_range'].value = range;
+    let [w, h] = size;
+    m = [-w / 2, -h / 2, 0, 1, w / 2, -h / 2, 0, 1, w / 2, h / 2, 0, 1, -w / 2, h / 2, 0, 1];
+    for (var i = 0; i < 16; i++) M_corners[i] = m[i];
+    // mat4.transpose(M_corners, M_corners);
+    console.log(M_corners);
     create_texture(shape[1], shape[0], img_data_rgba, elevation_texture_offset);
     console.log(`new elevation data loaded (${shape[0]}x${shape[1]})`);
 }
@@ -320,7 +328,7 @@ function init(){
 
     let elevation_texture = create_texture(1, 1, null, elevation_texture_offset);
 
-    mat4.ortho(M_ortho, -ortho_fov, ortho_fov, -ortho_fov, ortho_fov, 0., ortho_depth);
+    // mat4.ortho(M_ortho, -ortho_fov, ortho_fov, -ortho_fov, ortho_fov, 0., ortho_depth);
     mat4.perspective(M_perpective, glMatrix.toRadian(45), canvas.width / canvas.height, 0.1, ortho_depth);
     
     add_uniform('elevation', 'sampler2D', elevation_texture_offset);
@@ -404,7 +412,14 @@ function init(){
         mat4.identity(uniforms['M_sun'].value);
         mat4.rotate(uniforms['M_sun'].value, uniforms['M_sun'].value, glMatrix.toRadian(180 - uniforms['sun_direction'].value), [0, 0, 1]);
         mat4.rotate(uniforms['M_sun'].value, uniforms['M_sun'].value, glMatrix.toRadian(uniforms['sun_elevation'].value - 90), [1, 0, 0]);
-        
+        mat4.invert(M_sun_inv, uniforms['M_sun'].value);
+        mat4.multiply(M_corners_proj, M_sun_inv, M_corners);
+        x_min = Math.min(M_corners_proj[0], M_corners_proj[4], M_corners_proj[8], M_corners_proj[12]) - (uniforms['elev_range'].value[1] - uniforms['elev_range'].value[0]) / 2;
+        x_max = Math.max(M_corners_proj[0], M_corners_proj[4], M_corners_proj[8], M_corners_proj[12]) + (uniforms['elev_range'].value[1] - uniforms['elev_range'].value[0]) / 2;
+        y_min = Math.min(M_corners_proj[1], M_corners_proj[5], M_corners_proj[9], M_corners_proj[13]) - (uniforms['elev_range'].value[1] - uniforms['elev_range'].value[0]) / 2;
+        y_max = Math.max(M_corners_proj[1], M_corners_proj[5], M_corners_proj[9], M_corners_proj[13]) + (uniforms['elev_range'].value[1] - uniforms['elev_range'].value[0]) / 2;
+        mat4.ortho(M_ortho, x_min, x_max, y_min, y_max, 0., ortho_depth);
+
         mat4.identity(uniforms['M_proj_sun'].value);
         mat4.translate(uniforms['M_proj_sun'].value, uniforms['M_proj_sun'].value, [0, 0, -200]);
         mat4.rotate(uniforms['M_proj_sun'].value, uniforms['M_proj_sun'].value, glMatrix.toRadian(uniforms['sun_elevation'].value - 90), [1, 0, 0]);
