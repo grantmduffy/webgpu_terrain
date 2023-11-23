@@ -205,18 +205,25 @@ function load_file(event){
         // let h = uniforms['print_height'].value;
         // ortho_fov = ((w ** 2 + h ** 2) ** 0.5) / 2.0;
         // mat4.ortho(M_ortho, -ortho_fov, ortho_fov, -ortho_fov, ortho_fov, 0., ortho_depth);
+        name_el = document.getElementById('model_name');
+        name_el.innerText = file.name;
     });
     file_reader.readAsArrayBuffer(file);
 }
 
 
-function load_url(path){
+function load_url(path, name=null){
     let req = new XMLHttpRequest();
     req.open('GET', path);
     req.responseType = 'arraybuffer';
     req.onreadystatechange = function(){
         if (this.readyState == 4 && this.status == 200){
             load_data(req.response);
+            if (name == null){
+                name = path;
+            }
+            name_el = document.getElementById('model_name');
+            name_el.innerText = name;
         }
     }
     req.send();
@@ -446,7 +453,7 @@ function init(){
     )
 
     compile_layers();
-    load_url('rainier.gmd');
+    load_url('rainier.gmd', 'Mount Rainier');
 
     let loop = function(){
         draw_layers();

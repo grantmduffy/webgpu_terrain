@@ -42,12 +42,13 @@
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown" aria-expanded="false">Model</a>
           <ul class="dropdown-menu w-100">
-            <li><a class="dropdown-item" href="#">Mount Rainier</a></li>
-            <li><a class="dropdown-item" href="#">Mount St. Helens</a></li>
-            <li><a class="dropdown-item" href="#">Zion Canyon</a></li>
+            <li><a class="dropdown-item" href="#" onclick="load_url('rainier.gmd', 'Mount Rainier')">Mount Rainier</a></li>
+            <li><a class="dropdown-item" href="#" onclick="load_url('st_helens.gmd', 'Mount St. Helens')">Mount St. Helens</a></li>
+            <li><a class="dropdown-item" href="#" onclick="load_url('zion.gmd', 'Zion Canyon')">Zion Canyon</a></li>
+            <li><a class="dropdown-item" href="#" onclick="load_url('enchantments.gmd', 'The Enchantments')">The Enchantments</a></li>
             <li><hr class="dropdown-divider"></li>
             <li>
-              <input class="form-control" type="file" id="file-selector" accept=".gmd">
+              <input class="form-control" type="file" id="file-selector" accept=".gmd" onchange="load_file(event)">
             </li>
           </ul>
         </li>
