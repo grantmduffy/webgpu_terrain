@@ -33,12 +33,8 @@ function rgba2hex(vals){
 }
 
 function setup_gl(canvas, cull=null, depth_test=true){
-    width = canvas.width;
-    height = canvas.height;
     let rect = canvas.getBoundingClientRect();
     canvas.oncontextmenu = function(e) { e.preventDefault(); e.stopPropagation(); }
-    offset_x = rect.left;
-    offset_y = rect.top;
     gl = canvas.getContext('webgl');
     gl.getExtension("OES_texture_float");
     gl.getExtension("OES_texture_float_linear");
