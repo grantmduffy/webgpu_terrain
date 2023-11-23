@@ -330,21 +330,56 @@ function get_walls(){
     ]
 }
 
+function update_canvas(entries){
+    // console.log('update canvas');
+    let entry = entries[0];
+    let width;
+    let height;
+    let dpr = window.devicePixelRatio;
+    if (entry.devicePixelContentBoxSize) {
+        // NOTE: Only this path gives the correct answer
+        // The other paths are imperfect fallbacks
+        // for browsers that don't provide anyway to do this
+        width = entry.devicePixelContentBoxSize[0].inlineSize;
+        height = entry.devicePixelContentBoxSize[0].blockSize;
+        dpr = 1; // it's already in width and height
+    } else if (entry.contentBoxSize) {
+        if (entry.contentBoxSize[0]) {
+            width = entry.contentBoxSize[0].inlineSize;
+            height = entry.contentBoxSize[0].blockSize;
+        } else {
+            width = entry.contentBoxSize.inlineSize;
+            height = entry.contentBoxSize.blockSize;
+        }
+    } else {
+        width = entry.contentRect.width;
+        height = entry.contentRect.height;
+    }
+    const displayWidth = Math.round(width * dpr);
+    const displayHeight = Math.round(height * dpr);
+    
+    let canvas = entries[0].target;
+    [canvas.width, canvas.height] = [displayWidth, displayHeight];
+    mat4.perspective(M_perpective, glMatrix.toRadian(45), displayWidth / displayHeight, 0.1, ortho_depth);
+    uniforms['canvas_res'].value = [displayWidth, displayHeight];
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+}
+
 function init(){
     let canvas = document.getElementById('gl-canvas');
+    let observer = new ResizeObserver(update_canvas);
+    observer.observe(canvas, {box: 'device-pixel-content-box'});
     setup_gl(canvas, cull=null, true);
-    let aspect_ratio = canvas.width / canvas.height;
 
     [rect_verts, rect_tris] = get_mesh(1, 1, 256, 256);
     [wall_verts, wall_tris] = get_walls();
 
     let elevation_texture = create_texture(1, 1, null, elevation_texture_offset);
 
-    // mat4.ortho(M_ortho, -ortho_fov, ortho_fov, -ortho_fov, ortho_fov, 0., ortho_depth);
-    mat4.perspective(M_perpective, glMatrix.toRadian(45), canvas.width / canvas.height, 0.1, ortho_depth);
+    mat4.perspective(M_perpective, glMatrix.toRadian(45), canvas.clientWidth / canvas.clientHeight, 0.1, ortho_depth);
     
     add_uniform('elevation', 'sampler2D', elevation_texture_offset);
-    add_uniform('canvas_res', 'vec2', [canvas.width, canvas.height])
+    add_uniform('canvas_res', 'vec2', [canvas.clientWidth, canvas.clientHeight]);
     add_uniform('sun_res', 'vec2', [sun_res, sun_res]);
     add_uniform('print_width', 'float', 200.);
     add_uniform('print_height', 'float', 200.);
@@ -417,10 +452,15 @@ function init(){
         draw_layers();
         setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
 
+        // if (canvas.width != canvas.clientWidth || canvas.height != canvas.clientHeight){
+        //     [canvas.width, canvas.height] = [canvas.clientWidth, canvas.clientHeight];
+        //     // update_canvas();
+        // }
+
         mat4.identity(uniforms['M_proj'].value);
         mat4.translate(uniforms['M_proj'].value, uniforms['M_proj'].value, [0, 0, -200]);
-        mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian(-uniforms['mouse'].value[1] * 90 / canvas.height), [1, 0, 0]);
-        mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian((uniforms['mouse'].value[0] - 0.5) * 360 / canvas.width), [0, 0, 1]);
+        mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian(-uniforms['mouse'].value[1] * 90 / canvas.clientHeight), [1, 0, 0]);
+        mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian((uniforms['mouse'].value[0] - 0.5) * 360 / canvas.clientWidth), [0, 0, 1]);
         mat4.multiply(uniforms['M_proj'].value, M_perpective, uniforms['M_proj'].value);
 
         mat4.identity(uniforms['M_sun'].value);
