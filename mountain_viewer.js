@@ -372,6 +372,22 @@ function update_canvas(entries){
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 }
 
+function hide_modal(){
+    console.log('hide modal');
+    // document.getElementById('settings_modal').hidden = true;
+    document.getElementsByClassName('modal-backdrop')[0].hidden = true;
+    document.getElementsByClassName('modal-content')[0].style.setProperty('opacity', '30%', 'important');
+    document.getElementsByClassName('modal-content')[0].style.setProperty('backdrop-filter', 'unset', 'important');
+}
+
+function show_modal(){
+    console.log('show modal');
+    // document.getElementById('settings_modal').hidden = false;
+    document.getElementsByClassName('modal-backdrop')[0].hidden = false;
+    document.getElementsByClassName('modal-content')[0].style.setProperty('opacity', null);
+    document.getElementsByClassName('modal-content')[0].style.setProperty('backdrop-filter', null);
+}
+
 function init(){
     let canvas = document.getElementById('gl-canvas');
     let observer = new ResizeObserver(update_canvas);
@@ -383,10 +399,10 @@ function init(){
 
     let elevation_texture = create_texture(1, 1, null, elevation_texture_offset);
 
-    mat4.perspective(M_perpective, glMatrix.toRadian(45), canvas.clientWidth / canvas.clientHeight, 0.1, ortho_depth);
+    mat4.perspective(M_perpective, glMatrix.toRadian(45), canvas.width / canvas.height, 0.1, ortho_depth);
     
     add_uniform('elevation', 'sampler2D', elevation_texture_offset);
-    add_uniform('canvas_res', 'vec2', [canvas.clientWidth, canvas.clientHeight]);
+    add_uniform('canvas_res', 'vec2', [canvas.width, canvas.height]);
     add_uniform('sun_res', 'vec2', [sun_res, sun_res]);
     add_uniform('print_width', 'float', 200.);
     add_uniform('print_height', 'float', 200.);
@@ -455,19 +471,20 @@ function init(){
     compile_layers();
     load_url('rainier.gmd', 'Mount Rainier');
 
+    let uniform_inputs = document.getElementsByClassName('uniform-input');
+    for (var i = 0; i < uniform_inputs.length; i++){
+        uniform_inputs[i].onmousedown = hide_modal;
+        uniform_inputs[i].onmouseup = show_modal;
+    }
+
     let loop = function(){
         draw_layers();
         setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
 
-        // if (canvas.width != canvas.clientWidth || canvas.height != canvas.clientHeight){
-        //     [canvas.width, canvas.height] = [canvas.clientWidth, canvas.clientHeight];
-        //     // update_canvas();
-        // }
-
         mat4.identity(uniforms['M_proj'].value);
         mat4.translate(uniforms['M_proj'].value, uniforms['M_proj'].value, [0, 0, -200]);
-        mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian(-uniforms['mouse'].value[1] * 90 / canvas.clientHeight), [1, 0, 0]);
-        mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian((uniforms['mouse'].value[0] - 0.5) * 360 / canvas.clientWidth), [0, 0, 1]);
+        mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian(-uniforms['mouse'].value[1] * 90 / canvas.height), [1, 0, 0]);
+        mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian((uniforms['mouse'].value[0] - 0.5) * 360 / canvas.width), [0, 0, 1]);
         mat4.multiply(uniforms['M_proj'].value, M_perpective, uniforms['M_proj'].value);
 
         mat4.identity(uniforms['M_sun'].value);
