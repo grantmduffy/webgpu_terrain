@@ -1,5 +1,5 @@
 var global_glsl = `
-precision mediump float;
+precision highp float;
 `;
 
 var gl = null;
