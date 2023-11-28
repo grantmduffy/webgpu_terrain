@@ -1,9 +1,22 @@
 global_glsl += `
 #define eps 0.001
 #define pi 3.1495
-#define N_AMBIENT_OCCLUSION 8
-#define N_SHADOW 8
-#define min_ao_eps 0.0001
+#define N_AMBIENT_OCCLUSION 0
+#define N_SHADOW 1
+
+float rand(vec2 co){
+    return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+vec2 rand_2d(vec2 co){
+    float r = rand(co);
+    return vec2(r, rand(vec2(co.x, r)));
+}
+
+vec3 rand_3d(vec2 co){
+    float r = rand(co);
+    return vec3(r, rand(vec2(co.x, r)), rand(vec2(co.y, r)));
+}
 `;
 
 let sun_vs_src = `
@@ -71,28 +84,15 @@ void main(){
     vec3 rgb_intensity = ambient_intensity * ambient_color.rgb;
 
     // shadow map
-    float shadow_depth = texture2D(sun_layer, uv_sun.xy * canvas_res / sun_res).g - uv_sun.z + eps;
-    float shadow_val = float(N_SHADOW) * float(shadow_depth > 0.);
-    for (int i = 0; i < N_SHADOW; i++){
-        float sd_n = float(N_SHADOW - i - 1) * float(texture2D(sun_layer, uv_sun.xy * canvas_res / sun_res + vec2(0., eps * shadow_softness * 1. * float(i))).g - uv_sun.z + eps > 0.);
-        float sd_s = float(N_SHADOW - i - 1) * float(texture2D(sun_layer, uv_sun.xy * canvas_res / sun_res + vec2(0., -eps * shadow_softness * 1. * float(i))).g - uv_sun.z + eps > 0.);
-        float sd_e = float(N_SHADOW - i - 1) * float(texture2D(sun_layer, uv_sun.xy * canvas_res / sun_res + vec2(eps * shadow_softness * 1. * float(i), 0.)).g - uv_sun.z + eps > 0.);
-        float sd_w = float(N_SHADOW - i - 1) * float(texture2D(sun_layer, uv_sun.xy * canvas_res / sun_res + vec2(-eps * shadow_softness * 1. * float(i), 0.)).g - uv_sun.z + eps > 0.);
-        shadow_val += sd_n + sd_s + sd_e + sd_w;    
-    }
-    shadow_val /= float(N_SHADOW * (2 * N_SHADOW - 1));
+    float shadow_depth = texture2D(sun_layer, (uv_sun.xy + shadow_eps * rand_2d(uv_sun.xy)) * canvas_res / sun_res).g - uv_sun.z + eps;
+    float shadow_val = float(shadow_depth > 0.);
     rgb_intensity += shadow_val * sun_color.rgb * sun_intensity * clamp(dot(norm, sun_vector.xyz), 0., 1.);
     
     // calculate ambient occlusion
-    for (int i = 0; i < N_AMBIENT_OCCLUSION; i++){
-        float ao_eps = min_ao_eps * exp(float(i));
-        e_n = texture2D(elevation, uv + vec2(0., ao_eps));
-        e_s = texture2D(elevation, uv + vec2(0., -ao_eps));
-        e_e = texture2D(elevation, uv + vec2(ao_eps, 0.));
-        e_w = texture2D(elevation, uv + vec2(-ao_eps, 0.));
-        float curvature = clamp(0.01 * (e_n.x + e_s.x + e_e.x + e_w.x - 4. * e.x) / (ao_eps), 0., max_occlusion);
-        rgb_intensity *= exp(-curvature * ambient_occlusion);
-    }
+    vec2 dir = ao_eps * pow(rand_2d(uv), vec2(4.));
+    float dir_len = length(dir);
+    float curvature = exp(-dir_len) * (2. * texture2D(elevation, uv).x - texture2D(elevation, uv + dir).x - texture2D(elevation, uv - dir).x) / dir_len;
+    rgb_intensity *= exp(min(curvature, 0.) * ambient_occlusion);
     
     gl_FragColor = convert_colorspace(rgb_intensity);
     gl_FragColor.rgb = pow(gl_FragColor.rgb, vec3(gamma));
@@ -165,6 +165,7 @@ function get_event_xy(event){
     } else {
         event_x = event.touches[0].clientX;
         event_y = event.touches[0].clientY;
+        // event.preventDefault();
     }
     return [event_x, event_y];
 }
@@ -372,6 +373,22 @@ function update_canvas(entries){
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 }
 
+function hide_modal(){
+    console.log('hide modal');
+    // document.getElementById('settings_modal').hidden = true;
+    document.getElementsByClassName('modal-backdrop')[0].hidden = true;
+    document.getElementsByClassName('modal-content')[0].style.setProperty('opacity', '30%', 'important');
+    document.getElementsByClassName('modal-content')[0].style.setProperty('backdrop-filter', 'unset', 'important');
+}
+
+function show_modal(){
+    console.log('show modal');
+    // document.getElementById('settings_modal').hidden = false;
+    document.getElementsByClassName('modal-backdrop')[0].hidden = false;
+    document.getElementsByClassName('modal-content')[0].style.setProperty('opacity', null);
+    document.getElementsByClassName('modal-content')[0].style.setProperty('backdrop-filter', null);
+}
+
 function init(){
     let canvas = document.getElementById('gl-canvas');
     let observer = new ResizeObserver(update_canvas);
@@ -383,10 +400,10 @@ function init(){
 
     let elevation_texture = create_texture(1, 1, null, elevation_texture_offset);
 
-    mat4.perspective(M_perpective, glMatrix.toRadian(45), canvas.clientWidth / canvas.clientHeight, 0.1, ortho_depth);
+    mat4.perspective(M_perpective, glMatrix.toRadian(45), canvas.width / canvas.height, 0.1, ortho_depth);
     
     add_uniform('elevation', 'sampler2D', elevation_texture_offset);
-    add_uniform('canvas_res', 'vec2', [canvas.clientWidth, canvas.clientHeight]);
+    add_uniform('canvas_res', 'vec2', [canvas.width, canvas.height]);
     add_uniform('sun_res', 'vec2', [sun_res, sun_res]);
     add_uniform('print_width', 'float', 200.);
     add_uniform('print_height', 'float', 200.);
@@ -406,11 +423,13 @@ function init(){
     add_uniform('ambient_color', 'vec4', [0.56, 0.75, 1.0, 1.0], true);
     add_uniform('ambient_intensity', 'float', .55, true, 0., 2.);
     add_uniform('exposure', 'float', 2.2, true, 0., 10.);
-    add_uniform('ambient_occlusion', 'float', 0.025, true, 0., 0.2);
+    add_uniform('ambient_occlusion', 'float', 0.004 , true, 0., 0.1);
     add_uniform('gamma', 'float', 2.0, true, 0.0, 5.0);
     add_uniform('base_thickness', 'float', 8., true, 0., 30.);
     add_uniform('shadow_softness', 'float', 0.5, true, 0., 1.);
     add_uniform('max_occlusion', 'float', 10., true, 0., 20.);
+    add_uniform('ao_eps', 'float', 0.1, true, 0., 0.5);
+    add_uniform('shadow_eps', 'float', 0.001, true, 0., 0.003);
 
     let rect_vert_buffer = create_buffer(new Float32Array(rect_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let rect_tri_buffer = create_buffer(new Uint16Array(rect_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
@@ -455,19 +474,20 @@ function init(){
     compile_layers();
     load_url('rainier.gmd', 'Mount Rainier');
 
+    let uniform_inputs = document.getElementsByClassName('uniform-input');
+    for (var i = 0; i < uniform_inputs.length; i++){
+        uniform_inputs[i].onpointerdown = hide_modal;
+        uniform_inputs[i].onpointerup = show_modal;
+    }
+
     let loop = function(){
         draw_layers();
         setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
 
-        // if (canvas.width != canvas.clientWidth || canvas.height != canvas.clientHeight){
-        //     [canvas.width, canvas.height] = [canvas.clientWidth, canvas.clientHeight];
-        //     // update_canvas();
-        // }
-
         mat4.identity(uniforms['M_proj'].value);
         mat4.translate(uniforms['M_proj'].value, uniforms['M_proj'].value, [0, 0, -200]);
-        mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian(-uniforms['mouse'].value[1] * 90 / canvas.clientHeight), [1, 0, 0]);
-        mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian((uniforms['mouse'].value[0] - 0.5) * 360 / canvas.clientWidth), [0, 0, 1]);
+        mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian(-uniforms['mouse'].value[1] * 90 / canvas.height), [1, 0, 0]);
+        mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian((uniforms['mouse'].value[0] - 0.5) * 360 / canvas.width), [0, 0, 1]);
         mat4.multiply(uniforms['M_proj'].value, M_perpective, uniforms['M_proj'].value);
 
         mat4.identity(uniforms['M_sun'].value);
