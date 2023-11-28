@@ -1,9 +1,9 @@
 global_glsl += `
 #define eps 0.001
 #define pi 3.1495
-#define N_AMBIENT_OCCLUSION 8
-#define N_SHADOW 8
-#define min_ao_eps 0.0001
+#define N_AMBIENT_OCCLUSION 0
+#define N_SHADOW 1
+// #define min_ao_eps 0.0001
 `;
 
 let sun_vs_src = `
@@ -165,6 +165,7 @@ function get_event_xy(event){
     } else {
         event_x = event.touches[0].clientX;
         event_y = event.touches[0].clientY;
+        // event.preventDefault();
     }
     return [event_x, event_y];
 }
@@ -427,6 +428,7 @@ function init(){
     add_uniform('base_thickness', 'float', 8., true, 0., 30.);
     add_uniform('shadow_softness', 'float', 0.5, true, 0., 1.);
     add_uniform('max_occlusion', 'float', 10., true, 0., 20.);
+    add_uniform('min_ao_eps', 'float', 0.0001, true, 0., 0.01);
 
     let rect_vert_buffer = create_buffer(new Float32Array(rect_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let rect_tri_buffer = create_buffer(new Uint16Array(rect_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
@@ -473,8 +475,8 @@ function init(){
 
     let uniform_inputs = document.getElementsByClassName('uniform-input');
     for (var i = 0; i < uniform_inputs.length; i++){
-        uniform_inputs[i].onmousedown = hide_modal;
-        uniform_inputs[i].onmouseup = show_modal;
+        uniform_inputs[i].onpointerdown = hide_modal;
+        uniform_inputs[i].onpointerup = show_modal;
     }
 
     let loop = function(){
