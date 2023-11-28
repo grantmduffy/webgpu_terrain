@@ -1,8 +1,7 @@
 global_glsl += `
-// #define eps 0.001
 #define pi 3.1495
-#define N_AMBIENT_OCCLUSION 0
-#define N_SHADOW 1
+#define n_ao 2
+#define n_shadow 2
 
 float rand(vec2 co){
     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
@@ -97,16 +96,20 @@ void main(){
     rgb_intensity += shadow_val * sun_color.rgb * sun_intensity * clamp(dot(norm, sun_vector.xyz), 0., 1.);
     
     // calculate ambient occlusion
-    vec2 dir = ao_eps * pow(rand_2d(uv), vec2(ao_power));
-    float dir_len = length(dir);
-    float z0 = texture2D(elevation, world_to_uv(world_coord.xy - dir)).x;
     float z1 = texture2D(elevation, uv).x;
-    float z2 = texture2D(elevation, world_to_uv(world_coord.xy + dir)).x;
-    float f1 = (z2 - z0) / (2. * dir_len);
-    float f2 = (z2 - 2. * z1 + z0) / (dir_len * dir_len);
-    
-    float curvature = f2 / pow(1. + f1 * f1, 3. / 2.);
-    rgb_intensity *= exp(min(-curvature, 0.) * ambient_occlusion);
+    float curvature = 0.;
+    for (int i = 0; i < n_ao; i++){
+        vec2 dir = ao_eps * pow(rand_2d(uv + float(i)), vec2(ao_power));
+        float dir_len = length(dir);
+        float z0 = texture2D(elevation, world_to_uv(world_coord.xy - dir)).x;
+        float z2 = texture2D(elevation, world_to_uv(world_coord.xy + dir)).x;
+        float f1 = (z2 - z0) / (2. * dir_len);
+        float f2 = (z2 - 2. * z1 + z0) / (dir_len * dir_len);
+        curvature += max(f2 / pow(1. + f1 * f1, 3. / 2.), 0.);
+    }
+    curvature /= float(n_ao);
+
+    rgb_intensity *= exp(-curvature * ambient_occlusion);
     
     gl_FragColor = convert_colorspace(rgb_intensity);
     gl_FragColor.rgb = pow(gl_FragColor.rgb, vec3(gamma));
@@ -447,6 +450,8 @@ function init(){
     add_uniform('ao_power', 'float', 1.5, true, 0, 10);
     add_uniform('shadow_eps', 'float', 0.001, true, 0., 0.003);
     add_uniform('eps', 'float', 0.001, true, 0., 0.003);
+    // add_uniform('n_ao', 'int', 2, true, 0, 10);
+    // add_uniform('n_shadow', 'int', 2, true, 0, 10);
 
     let rect_vert_buffer = create_buffer(new Float32Array(rect_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let rect_tri_buffer = create_buffer(new Uint16Array(rect_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
