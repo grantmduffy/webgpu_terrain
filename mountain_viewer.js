@@ -1,7 +1,9 @@
 global_glsl += `
 #define pi 3.1495
-#define n_ao 2
-#define n_shadow 4
+// #define n_ao 10
+// #define n_shadow 10
+#define n_ao 3
+#define n_shadow 2
 
 float rand(vec2 co){
     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
@@ -95,16 +97,12 @@ void main(){
     vec3 rgb_intensity = ambient_intensity * ambient_color.rgb;
 
     // shadow map
-
-    // float shadow_val = 0.;
-    // for (int i = 0; i < n_shadow; i++){
-    //     float shadow_depth = texture2D(sun_layer, (uv_sun.xy + shadow_eps * rand_2d(uv_sun.xy + float(i))) * canvas_res / sun_res).g - uv_sun.z + eps;
-    //     shadow_val += float(shadow_depth > 0.);
-    // }
-    // shadow_val /= float(n_shadow);
-    
-    float shadow_depth = texture2D(sun_layer, uv_sun.xy + shadow_eps * rand_2d(uv_sun.xy)).g - uv_sun.z + eps;
-    float shadow_val = float(shadow_depth > 0.);
+    float shadow_val = 0.;
+    for (int i = 0; i < n_shadow; i++){
+        float shadow_depth = texture2D(sun_layer, uv_sun.xy + shadow_eps * rand_2d(uv_sun.xy + float(i))).g - uv_sun.z + eps;
+        shadow_val += float(shadow_depth > 0.);
+    }
+    shadow_val /= float(n_shadow);
     rgb_intensity += shadow_val * sun_color.rgb * sun_intensity * clamp(dot(norm, sun_vector.xyz), 0., 1.);
     
     // calculate ambient occlusion
@@ -120,12 +118,13 @@ void main(){
         curvature += max(f2 / pow(1. + f1 * f1, 3. / 2.), 0.);
     }
     curvature /= float(n_ao);
-
     rgb_intensity *= exp(-curvature * ambient_occlusion);
     
+    // convert to rgb
     gl_FragColor = convert_colorspace(rgb_intensity);
     gl_FragColor.rgb = pow(gl_FragColor.rgb, vec3(gamma));
 
+    // debugging
     // gl_FragColor = vec4(1., uv_sun.xy, 1.);
     // gl_FragColor = texture2D(sun_layer, (uv_sun.xy + shadow_eps * rand_2d(uv_sun.xy)) * canvas_res / sun_res)
 }
@@ -250,11 +249,6 @@ function load_file(event){
     let file_reader = new FileReader();
     file_reader.addEventListener('load', (event) =>{
         load_data(event.target.result);
-        // TODO: figure out why this isn't working
-        // let w = uniforms['print_width'].value;
-        // let h = uniforms['print_height'].value;
-        // ortho_fov = ((w ** 2 + h ** 2) ** 0.5) / 2.0;
-        // mat4.ortho(M_ortho, -ortho_fov, ortho_fov, -ortho_fov, ortho_fov, 0., ortho_depth);
         name_el = document.getElementById('model_name');
         name_el.innerText = file.name;
     });
@@ -478,7 +472,7 @@ function init(){
     add_uniform('shadow_softness', 'float', 0.5, true, 0., 1.);
     add_uniform('ao_eps', 'float', 7.5, true, 0., 30);
     add_uniform('ao_power', 'float', 1.5, true, 0, 10);
-    add_uniform('shadow_eps', 'float', 0.001, true, 0., 0.003);
+    add_uniform('shadow_eps', 'float', 0.004, true, 0., 0.01);
     add_uniform('eps', 'float', 0.001, true, 0., 0.003);
     // add_uniform('n_ao', 'int', 2, true, 0, 10);
     // add_uniform('n_shadow', 'int', 2, true, 0, 10);
