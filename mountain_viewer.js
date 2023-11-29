@@ -196,13 +196,14 @@ let M_ortho = new Float32Array(16);
 let M_corners = new Float32Array(16);
 let M_corners_proj = new Float32Array(16);
 let M_sun_inv = new Float32Array(16);
-let sun_res = 1024;
+let sun_res = 512;
 let elevation_texture_offset = 7;
 let ortho_fov = 100.;
 let ortho_depth = 800.;
 var mouse_down_pos = [0, 0];
 var mouse_pos = [0, 0];
 var mouse_is_down = false;
+let default_settings = [];
 
 
 function get_event_xy(event){
@@ -417,7 +418,7 @@ function update_canvas(entries){
 }
 
 function hide_modal(){
-    console.log('hide modal');
+    // console.log('hide modal');
     // document.getElementById('settings_modal').hidden = true;
     document.getElementsByClassName('modal-backdrop')[0].hidden = true;
     document.getElementsByClassName('modal-content')[0].style.setProperty('opacity', '30%', 'important');
@@ -425,11 +426,26 @@ function hide_modal(){
 }
 
 function show_modal(){
-    console.log('show modal');
+    // console.log('show modal');
     // document.getElementById('settings_modal').hidden = false;
     document.getElementsByClassName('modal-backdrop')[0].hidden = false;
     document.getElementsByClassName('modal-content')[0].style.setProperty('opacity', null);
     document.getElementsByClassName('modal-content')[0].style.setProperty('backdrop-filter', null);
+}
+
+function reset_to_defaults(){
+    for (var name in uniforms){
+        let u = uniforms[name];
+        if (u.input){
+            u.value = u.default;
+            let e = document.getElementById(name);
+            if (e.type == 'color'){
+                e.value = rgba2hex(u.default);
+            } else {
+                e.value = u.default;
+            }
+        }
+    }
 }
 
 function init(){
