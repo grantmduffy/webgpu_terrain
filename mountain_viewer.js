@@ -1,7 +1,7 @@
 global_glsl += `
 #define pi 3.1495
 #define n_ao 2
-#define n_shadow 2
+#define n_shadow 4
 
 float rand(vec2 co){
     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
@@ -30,6 +30,8 @@ void main(){
         1.
     );
     gl_Position = M_proj_sun * world_coord;
+    // gl_Position = world_coord * M_proj_sun;
+    gl_Position.xy = (gl_Position.xy + 1.) * sun_res / canvas_res - 1.;
 }
 `;
 
@@ -38,6 +40,7 @@ varying vec2 uv;
 
 void main(){
     gl_FragColor = vec4(0., gl_FragCoord.z, texture2D(elevation, uv).y, 1.);
+    // gl_FragColor = vec4(1., gl_FragCoord.xy / sun_res, 1.);
 }
 `;
 
@@ -56,6 +59,7 @@ void main(){
     );
     gl_Position = M_proj * world_coord;
     uv_sun = (M_proj_sun * world_coord) / 2. + 0.5;
+    // uv_sun.xy *= canvas_res / sun_res;
 }
 `;
 
@@ -91,7 +95,15 @@ void main(){
     vec3 rgb_intensity = ambient_intensity * ambient_color.rgb;
 
     // shadow map
-    float shadow_depth = texture2D(sun_layer, (uv_sun.xy + shadow_eps * rand_2d(uv_sun.xy)) * canvas_res / sun_res).g - uv_sun.z + eps;
+
+    // float shadow_val = 0.;
+    // for (int i = 0; i < n_shadow; i++){
+    //     float shadow_depth = texture2D(sun_layer, (uv_sun.xy + shadow_eps * rand_2d(uv_sun.xy + float(i))) * canvas_res / sun_res).g - uv_sun.z + eps;
+    //     shadow_val += float(shadow_depth > 0.);
+    // }
+    // shadow_val /= float(n_shadow);
+    
+    float shadow_depth = texture2D(sun_layer, uv_sun.xy + shadow_eps * rand_2d(uv_sun.xy)).g - uv_sun.z + eps;
     float shadow_val = float(shadow_depth > 0.);
     rgb_intensity += shadow_val * sun_color.rgb * sun_intensity * clamp(dot(norm, sun_vector.xyz), 0., 1.);
     
@@ -114,7 +126,8 @@ void main(){
     gl_FragColor = convert_colorspace(rgb_intensity);
     gl_FragColor.rgb = pow(gl_FragColor.rgb, vec3(gamma));
 
-    // gl_FragColor = vec4(vec3(f2), 1.);
+    // gl_FragColor = vec4(1., uv_sun.xy, 1.);
+    // gl_FragColor = texture2D(sun_layer, (uv_sun.xy + shadow_eps * rand_2d(uv_sun.xy)) * canvas_res / sun_res)
 }
 `;
 
@@ -159,6 +172,23 @@ void main(){
 }
 `;
 
+debug_vs_src = `
+attribute vec2 vert_pos;
+
+void main(){
+    gl_Position = vec4(vert_pos, 0., 1.);
+}
+`;
+
+debug_fs_src = `
+void main(){
+    vec2 uv = gl_FragCoord.xy / canvas_res;
+    gl_FragColor = vec4(1., uv, 1.);
+    vec4 sun = texture2D(sun_layer, uv);
+    gl_FragColor = mix(gl_FragColor * 0.5, sun, sun.a);
+}
+`;
+
 let fps = 60;
 var rect_tris, rect_verts;
 var camera_dist = 100.;
@@ -167,7 +197,7 @@ let M_ortho = new Float32Array(16);
 let M_corners = new Float32Array(16);
 let M_corners_proj = new Float32Array(16);
 let M_sun_inv = new Float32Array(16);
-let sun_res = 2048;
+let sun_res = 1024;
 let elevation_texture_offset = 7;
 let ortho_fov = 100.;
 let ortho_depth = 800.;
@@ -467,9 +497,9 @@ function init(){
         rect_tris.length,
         true,
         create_fbo(sun_res, sun_res),
-        create_texture(sun_res, sun_res, [1., 0., 0., 1.]),
-        create_texture(sun_res, sun_res, [0., 1., 0., 1.]),
-        false
+        create_texture(sun_res, sun_res, [1., 0., 0., 1.], 0, 'clamp'),
+        create_texture(sun_res, sun_res, [0., 1., 0., 1.], 0, 'clamp'),
+        false, [0, 0, 0, 0]
     );
 
     add_layer(
@@ -492,6 +522,16 @@ function init(){
         false, null, null, null, true, [0, 0, 0, 1], 
         3, [['norm', 3]]
     )
+
+    // add_layer(
+    //     'debug_layer',
+    //     debug_vs_src,
+    //     debug_fs_src,
+    //     create_buffer(new Float32Array(screen_mesh[0].flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW),
+    //     create_buffer(new Uint16Array(screen_mesh[1].flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW),
+    //     screen_mesh[1].length,
+    //     true
+    // );
 
     compile_layers();
     load_url('rainier.gmd', 'Mount Rainier');
