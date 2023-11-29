@@ -1,8 +1,9 @@
 global_glsl += `
-#define eps 0.001
 #define pi 3.1495
-#define N_AMBIENT_OCCLUSION 0
-#define N_SHADOW 1
+// #define n_ao 10
+// #define n_shadow 10
+#define n_ao 3
+#define n_shadow 2
 
 float rand(vec2 co){
     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
@@ -31,6 +32,8 @@ void main(){
         1.
     );
     gl_Position = M_proj_sun * world_coord;
+    // gl_Position = world_coord * M_proj_sun;
+    gl_Position.xy = (gl_Position.xy + 1.) * sun_res / canvas_res - 1.;
 }
 `;
 
@@ -39,6 +42,7 @@ varying vec2 uv;
 
 void main(){
     gl_FragColor = vec4(0., gl_FragCoord.z, texture2D(elevation, uv).y, 1.);
+    // gl_FragColor = vec4(1., gl_FragCoord.xy / sun_res, 1.);
 }
 `;
 
@@ -46,37 +50,46 @@ let camera_vs_src = `
 attribute vec2 vert_pos;
 varying vec2 uv;
 varying vec4 uv_sun;
+varying vec4 world_coord;
 
 void main(){
     uv = vert_pos + 0.5;
-    vec4 world_coord = vec4(
+    world_coord = vec4(
         vert_pos * vec2(print_width, print_height), 
         texture2D(elevation, uv).x - (elev_range.y + elev_range.x) / 2.,
         1.
     );
     gl_Position = M_proj * world_coord;
     uv_sun = (M_proj_sun * world_coord) / 2. + 0.5;
+    // uv_sun.xy *= canvas_res / sun_res;
 }
 `;
 
 let camera_fs_src = `
-varying vec2 uv;
+// varying vec2 uv;
 varying vec4 uv_sun;
+varying vec4 world_coord;
 
 vec4 convert_colorspace(vec3 intensity){
     return vec4(1. - exp(-exposure * intensity), 1.);
 }
 
+vec2 world_to_uv(vec2 world){
+    return world / vec2(print_width, print_height) + 0.5;
+}
+
 void main(){
+    vec2 uv = world_to_uv(world_coord.xy);
+
     vec4 e = texture2D(elevation, uv);
-    vec4 e_n = texture2D(elevation, uv + vec2(0., eps));
-    vec4 e_s = texture2D(elevation, uv + vec2(0., -eps));
-    vec4 e_e = texture2D(elevation, uv + vec2(eps, 0.));
-    vec4 e_w = texture2D(elevation, uv + vec2(-eps, 0.));
+    vec4 e_n = texture2D(elevation, world_to_uv(world_coord.xy + vec2(0., eps)));
+    vec4 e_s = texture2D(elevation, world_to_uv(world_coord.xy + vec2(0., -eps)));
+    vec4 e_e = texture2D(elevation, world_to_uv(world_coord.xy + vec2(eps, 0.)));
+    vec4 e_w = texture2D(elevation, world_to_uv(world_coord.xy + vec2(-eps, 0.)));
     
     vec3 norm = vec3(
-        (e_w.x - e_e.x) / (2. * eps * print_width),
-        (e_s.x - e_n.x) / (2. * eps * print_height),
+        (e_w.x - e_e.x) / (2. * eps),
+        (e_s.x - e_n.x) / (2. * eps),
         1.
     );
     vec4 sun_vector = M_sun * vec4(0., 0., 1., 1.);
@@ -84,18 +97,36 @@ void main(){
     vec3 rgb_intensity = ambient_intensity * ambient_color.rgb;
 
     // shadow map
-    float shadow_depth = texture2D(sun_layer, (uv_sun.xy + shadow_eps * rand_2d(uv_sun.xy)) * canvas_res / sun_res).g - uv_sun.z + eps;
-    float shadow_val = float(shadow_depth > 0.);
+    float shadow_val = 0.;
+    for (int i = 0; i < n_shadow; i++){
+        float shadow_depth = texture2D(sun_layer, uv_sun.xy + shadow_eps * rand_2d(uv_sun.xy + float(i))).g - uv_sun.z + eps;
+        shadow_val += float(shadow_depth > 0.);
+    }
+    shadow_val /= float(n_shadow);
     rgb_intensity += shadow_val * sun_color.rgb * sun_intensity * clamp(dot(norm, sun_vector.xyz), 0., 1.);
     
     // calculate ambient occlusion
-    vec2 dir = ao_eps * pow(rand_2d(uv), vec2(4.));
-    float dir_len = length(dir);
-    float curvature = exp(-dir_len) * (2. * texture2D(elevation, uv).x - texture2D(elevation, uv + dir).x - texture2D(elevation, uv - dir).x) / dir_len;
-    rgb_intensity *= exp(min(curvature, 0.) * ambient_occlusion);
+    float z1 = texture2D(elevation, uv).x;
+    float curvature = 0.;
+    for (int i = 0; i < n_ao; i++){
+        vec2 dir = ao_eps * pow(rand_2d(uv + float(i)), vec2(ao_power));
+        float dir_len = length(dir);
+        float z0 = texture2D(elevation, world_to_uv(world_coord.xy - dir)).x;
+        float z2 = texture2D(elevation, world_to_uv(world_coord.xy + dir)).x;
+        float f1 = (z2 - z0) / (2. * dir_len);
+        float f2 = (z2 - 2. * z1 + z0) / (dir_len * dir_len);
+        curvature += max(f2 / pow(1. + f1 * f1, 3. / 2.), 0.);
+    }
+    curvature /= float(n_ao);
+    rgb_intensity *= exp(-curvature * ambient_occlusion);
     
+    // convert to rgb
     gl_FragColor = convert_colorspace(rgb_intensity);
     gl_FragColor.rgb = pow(gl_FragColor.rgb, vec3(gamma));
+
+    // debugging
+    // gl_FragColor = vec4(1., uv_sun.xy, 1.);
+    // gl_FragColor = texture2D(sun_layer, (uv_sun.xy + shadow_eps * rand_2d(uv_sun.xy)) * canvas_res / sun_res)
 }
 `;
 
@@ -140,6 +171,23 @@ void main(){
 }
 `;
 
+debug_vs_src = `
+attribute vec2 vert_pos;
+
+void main(){
+    gl_Position = vec4(vert_pos, 0., 1.);
+}
+`;
+
+debug_fs_src = `
+void main(){
+    vec2 uv = gl_FragCoord.xy / canvas_res;
+    gl_FragColor = vec4(1., uv, 1.);
+    vec4 sun = texture2D(sun_layer, uv);
+    gl_FragColor = mix(gl_FragColor * 0.5, sun, sun.a);
+}
+`;
+
 let fps = 60;
 var rect_tris, rect_verts;
 var camera_dist = 100.;
@@ -148,13 +196,14 @@ let M_ortho = new Float32Array(16);
 let M_corners = new Float32Array(16);
 let M_corners_proj = new Float32Array(16);
 let M_sun_inv = new Float32Array(16);
-let sun_res = 2048;
+let sun_res = 512;
 let elevation_texture_offset = 7;
 let ortho_fov = 100.;
 let ortho_depth = 800.;
 var mouse_down_pos = [0, 0];
 var mouse_pos = [0, 0];
 var mouse_is_down = false;
+let default_settings = [];
 
 
 function get_event_xy(event){
@@ -201,11 +250,6 @@ function load_file(event){
     let file_reader = new FileReader();
     file_reader.addEventListener('load', (event) =>{
         load_data(event.target.result);
-        // TODO: figure out why this isn't working
-        // let w = uniforms['print_width'].value;
-        // let h = uniforms['print_height'].value;
-        // ortho_fov = ((w ** 2 + h ** 2) ** 0.5) / 2.0;
-        // mat4.ortho(M_ortho, -ortho_fov, ortho_fov, -ortho_fov, ortho_fov, 0., ortho_depth);
         name_el = document.getElementById('model_name');
         name_el.innerText = file.name;
     });
@@ -374,7 +418,7 @@ function update_canvas(entries){
 }
 
 function hide_modal(){
-    console.log('hide modal');
+    // console.log('hide modal');
     // document.getElementById('settings_modal').hidden = true;
     document.getElementsByClassName('modal-backdrop')[0].hidden = true;
     document.getElementsByClassName('modal-content')[0].style.setProperty('opacity', '30%', 'important');
@@ -382,11 +426,26 @@ function hide_modal(){
 }
 
 function show_modal(){
-    console.log('show modal');
+    // console.log('show modal');
     // document.getElementById('settings_modal').hidden = false;
     document.getElementsByClassName('modal-backdrop')[0].hidden = false;
     document.getElementsByClassName('modal-content')[0].style.setProperty('opacity', null);
     document.getElementsByClassName('modal-content')[0].style.setProperty('backdrop-filter', null);
+}
+
+function reset_to_defaults(){
+    for (var name in uniforms){
+        let u = uniforms[name];
+        if (u.input){
+            u.value = u.default;
+            let e = document.getElementById(name);
+            if (e.type == 'color'){
+                e.value = rgba2hex(u.default);
+            } else {
+                e.value = u.default;
+            }
+        }
+    }
 }
 
 function init(){
@@ -423,13 +482,16 @@ function init(){
     add_uniform('ambient_color', 'vec4', [0.56, 0.75, 1.0, 1.0], true);
     add_uniform('ambient_intensity', 'float', .55, true, 0., 2.);
     add_uniform('exposure', 'float', 2.2, true, 0., 10.);
-    add_uniform('ambient_occlusion', 'float', 0.004 , true, 0., 0.1);
+    add_uniform('ambient_occlusion', 'float', 1.3 , true, 0., 3.);
     add_uniform('gamma', 'float', 2.0, true, 0.0, 5.0);
     add_uniform('base_thickness', 'float', 8., true, 0., 30.);
     add_uniform('shadow_softness', 'float', 0.5, true, 0., 1.);
-    add_uniform('max_occlusion', 'float', 10., true, 0., 20.);
-    add_uniform('ao_eps', 'float', 0.1, true, 0., 0.5);
-    add_uniform('shadow_eps', 'float', 0.001, true, 0., 0.003);
+    add_uniform('ao_eps', 'float', 7.5, true, 0., 30);
+    add_uniform('ao_power', 'float', 1.5, true, 0, 10);
+    add_uniform('shadow_eps', 'float', 0.004, true, 0., 0.01);
+    add_uniform('eps', 'float', 0.001, true, 0., 0.003);
+    // add_uniform('n_ao', 'int', 2, true, 0, 10);
+    // add_uniform('n_shadow', 'int', 2, true, 0, 10);
 
     let rect_vert_buffer = create_buffer(new Float32Array(rect_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let rect_tri_buffer = create_buffer(new Uint16Array(rect_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
@@ -445,9 +507,9 @@ function init(){
         rect_tris.length,
         true,
         create_fbo(sun_res, sun_res),
-        create_texture(sun_res, sun_res, [1., 0., 0., 1.]),
-        create_texture(sun_res, sun_res, [0., 1., 0., 1.]),
-        false
+        create_texture(sun_res, sun_res, [1., 0., 0., 1.], 0, 'clamp'),
+        create_texture(sun_res, sun_res, [0., 1., 0., 1.], 0, 'clamp'),
+        false, [0, 0, 0, 0]
     );
 
     add_layer(
@@ -470,6 +532,16 @@ function init(){
         false, null, null, null, true, [0, 0, 0, 1], 
         3, [['norm', 3]]
     )
+
+    // add_layer(
+    //     'debug_layer',
+    //     debug_vs_src,
+    //     debug_fs_src,
+    //     create_buffer(new Float32Array(screen_mesh[0].flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW),
+    //     create_buffer(new Uint16Array(screen_mesh[1].flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW),
+    //     screen_mesh[1].length,
+    //     true
+    // );
 
     compile_layers();
     load_url('rainier.gmd', 'Mount Rainier');

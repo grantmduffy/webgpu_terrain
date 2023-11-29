@@ -129,7 +129,8 @@ function add_uniform(name, type, value, input=false, min=null, max=null){
     uniforms[name] = {
         'type': type,
         'value': value,
-        'input': input
+        'input': input,
+        'default': value
     };
     global_glsl = global_glsl.concat('\nuniform ', type, ' ', name, ';');
     let inputs_el = document.getElementById('inputs');
@@ -269,7 +270,8 @@ function swap_textures(l){
 }
 
 function draw_layers(){
-
+    // TODO: figure out if calling gl.viewport fixes weird scaling issues
+    
     for (let i = 0; i < layers.length; i++){
 
         let layer = layers[i];
