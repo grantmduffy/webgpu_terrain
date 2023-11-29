@@ -96,15 +96,6 @@ void main(){
     
     vec3 rgb_intensity = ambient_intensity * ambient_color.rgb;
 
-    // shadow map
-    float shadow_val = 0.;
-    for (int i = 0; i < n_shadow; i++){
-        float shadow_depth = texture2D(sun_layer, uv_sun.xy + shadow_eps * rand_2d(uv_sun.xy + float(i))).g - uv_sun.z + eps;
-        shadow_val += float(shadow_depth > 0.);
-    }
-    shadow_val /= float(n_shadow);
-    rgb_intensity += shadow_val * sun_color.rgb * sun_intensity * clamp(dot(norm, sun_vector.xyz), 0., 1.);
-    
     // calculate ambient occlusion
     float z1 = texture2D(elevation, uv).x;
     float curvature = 0.;
@@ -119,6 +110,15 @@ void main(){
     }
     curvature /= float(n_ao);
     rgb_intensity *= exp(-curvature * ambient_occlusion);
+
+    // shadow map
+    float shadow_val = 0.;
+    for (int i = 0; i < n_shadow; i++){
+        float shadow_depth = texture2D(sun_layer, uv_sun.xy + shadow_eps * rand_2d(uv_sun.xy + float(i))).g - uv_sun.z + eps;
+        shadow_val += float(shadow_depth > 0.);
+    }
+    shadow_val /= float(n_shadow);
+    rgb_intensity += shadow_val * sun_color.rgb * sun_intensity * clamp(dot(norm, sun_vector.xyz), 0., 1.);
     
     // convert to rgb
     gl_FragColor = convert_colorspace(rgb_intensity);
@@ -509,7 +509,7 @@ function init(){
         create_fbo(sun_res, sun_res),
         create_texture(sun_res, sun_res, [1., 0., 0., 1.], 0, 'clamp'),
         create_texture(sun_res, sun_res, [0., 1., 0., 1.], 0, 'clamp'),
-        false, [0, 0, 0, 0]
+        false, [0, 1000, 0, 0]
     );
 
     add_layer(
