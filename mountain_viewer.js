@@ -32,8 +32,6 @@ void main(){
         1.
     );
     gl_Position = M_proj_sun * world_coord;
-    // gl_Position = world_coord * M_proj_sun;
-    gl_Position.xy = (gl_Position.xy + 1.) * sun_res / canvas_res - 1.;
 }
 `;
 
@@ -42,18 +40,16 @@ varying vec2 uv;
 
 void main(){
     gl_FragColor = vec4(0., gl_FragCoord.z, texture2D(elevation, uv).y, 1.);
-    // gl_FragColor = vec4(1., gl_FragCoord.xy / sun_res, 1.);
 }
 `;
 
 let camera_vs_src = `
 attribute vec2 vert_pos;
-varying vec2 uv;
 varying vec4 uv_sun;
 varying vec4 world_coord;
 
 void main(){
-    uv = vert_pos + 0.5;
+    vec2 uv = vert_pos + 0.5;
     world_coord = vec4(
         vert_pos * vec2(print_width, print_height), 
         texture2D(elevation, uv).x - (elev_range.y + elev_range.x) / 2.,
@@ -61,12 +57,10 @@ void main(){
     );
     gl_Position = M_proj * world_coord;
     uv_sun = (M_proj_sun * world_coord) / 2. + 0.5;
-    // uv_sun.xy *= canvas_res / sun_res;
 }
 `;
 
 let camera_fs_src = `
-// varying vec2 uv;
 varying vec4 uv_sun;
 varying vec4 world_coord;
 
@@ -142,7 +136,6 @@ void main(){
     xyz = vec3(
         vert_pos.xy * vec2(print_width, print_height) / 2.,
         vert_pos.z * (elev_range.y - elev_range.x + base_thickness * 2.) / 2. - base_thickness
-        // vert_pos.z * (elev_range.y - elev_range.x + base_thickness) - 0.5 * (elev_range.y - elev_range.x) - base_thickness
     );
     uv = (vert_pos.xy + 1.) / 2.;
     gl_Position = M_proj * vec4(xyz, 1.);
@@ -414,7 +407,7 @@ function update_canvas(entries){
     [canvas.width, canvas.height] = [displayWidth, displayHeight];
     mat4.perspective(M_perpective, glMatrix.toRadian(45), displayWidth / displayHeight, 0.1, ortho_depth);
     uniforms['canvas_res'].value = [displayWidth, displayHeight];
-    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    // gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 }
 
 function hide_modal(){

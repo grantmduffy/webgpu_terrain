@@ -105,6 +105,8 @@ function create_texture(width, height, color=[0, 0, 0, 1.0], offset=0, edge='cla
         color = new Float32Array(Array(width * height).fill(color).flat());
     }
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.FLOAT, color);
+    texture.width = width;
+    texture.height = height;
     return texture;
 }
 
@@ -115,6 +117,8 @@ function create_fbo(width, height){
     gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height);
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
     gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthbuffer);
+    fbo.width = width;
+    fbo.height = height;
     return fbo;
 }
 
@@ -270,7 +274,6 @@ function swap_textures(l){
 }
 
 function draw_layers(){
-    // TODO: figure out if calling gl.viewport fixes weird scaling issues
     
     for (let i = 0; i < layers.length; i++){
 
@@ -322,6 +325,13 @@ function draw_layers(){
                 gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
                 gl.TEXTURE_2D, layer.fbo_texture, 0
             );
+        }
+
+        // set viewport
+        if (layer.fbo == null){
+            gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+        } else {
+            gl.viewport(0, 0, layer.fbo.width, layer.fbo.height);
         }
 
         // clear canvas
