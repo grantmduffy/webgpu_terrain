@@ -112,6 +112,7 @@ void main(){
         shadow_val += float(shadow_depth > 0.);
     }
     shadow_val /= float(n_shadow);
+    // float shadow_val = 1.;
     rgb_intensity += shadow_val * sun_color.rgb * sun_intensity * clamp(dot(norm, sun_vector.xyz), 0., 1.);
     
     // convert to rgb
@@ -486,7 +487,7 @@ function init(){
     add_uniform('ao_eps', 'float', 7.5, true, 0., 30);
     add_uniform('ao_power', 'float', 1.5, true, 0, 10);
     add_uniform('shadow_eps', 'float', 0.004, true, 0., 0.01);
-    add_uniform('eps', 'float', 0.001, true, 0., 0.003);
+    add_uniform('eps', 'float', 0.1, true, 0., 1.);
     // add_uniform('n_ao', 'int', 2, true, 0, 10);
     // add_uniform('n_shadow', 'int', 2, true, 0, 10);
 
