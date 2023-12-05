@@ -108,7 +108,7 @@ void main(){
     // shadow map
     float shadow_val = 0.;
     for (int i = 0; i < n_shadow; i++){
-        float shadow_depth = texture2D(sun_layer, uv_sun.xy + shadow_eps * rand_2d(uv_sun.xy + float(i))).g - uv_sun.z + eps;
+        float shadow_depth = texture2D(sun_layer, uv_sun.xy + shadow_softness * rand_2d(uv_sun.xy + float(i))).g - uv_sun.z + shadow_eps;
         shadow_val += float(shadow_depth > 0.);
     }
     shadow_val /= float(n_shadow);
@@ -483,10 +483,10 @@ function init(){
     add_uniform('ambient_occlusion', 'float', 1.3 , true, 0., 3.);
     add_uniform('gamma', 'float', 2.0, true, 0.0, 5.0);
     add_uniform('base_thickness', 'float', 8., true, 0., 30.);
-    add_uniform('shadow_softness', 'float', 0.5, true, 0., 1.);
+    add_uniform('shadow_softness', 'float', 0.004, true, 0., 0.01);
     add_uniform('ao_eps', 'float', 7.5, true, 0., 30);
     add_uniform('ao_power', 'float', 1.5, true, 0, 10);
-    add_uniform('shadow_eps', 'float', 0.004, true, 0., 0.01);
+    add_uniform('shadow_eps', 'float', 0.001, true, 0., 0.01);
     add_uniform('eps', 'float', 0.1, true, 0., 1.);
     // add_uniform('n_ao', 'int', 2, true, 0, 10);
     // add_uniform('n_shadow', 'int', 2, true, 0, 10);
