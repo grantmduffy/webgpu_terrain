@@ -137,7 +137,7 @@ function add_uniform(name, type, value, input=false, min=null, max=null){
     if (!input) return;
     switch (type){
         case 'vec4':
-            html = `<div class="uniform-div row"><label class="uniform-label col-sm" for="${name}">${name}: </label><input class="uniform-input uniform-color col-md" type="color" id="${name}" onchange="{
+            html = `<div class="uniform-div row"><label class="uniform-label col-sm" for="${name}">${name}: </label><input class="uniform-input uniform-color col-md" type="color" id="${name}" oninput="{
                 uniforms['${name}'].value = hex2rgba(document.getElementById('${name}').value);
                 document.getElementById('${name}_value').innerText = uniforms['${name}'].value.map(function(x){return x.toPrecision(2);}).join(', ');
             }" value="${rgba2hex(value)}"><label id="${name}_value" class="col-sm">${uniforms[name].value}</label></div>`;

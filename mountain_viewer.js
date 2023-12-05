@@ -481,6 +481,7 @@ function init(){
     add_uniform('sun_intensity', 'float', 1.7, true, 0., 5.);
     add_uniform('ambient_color', 'vec4', [0.56, 0.75, 1.0, 1.0], true);
     add_uniform('ambient_intensity', 'float', .55, true, 0., 2.);
+    add_uniform('background_color', 'vec4', [0, 0, 0, 1], true);
     add_uniform('exposure', 'float', 2.2, true, 0., 10.);
     add_uniform('ambient_occlusion', 'float', 1.3 , true, 0., 3.);
     add_uniform('gamma', 'float', 2.0, true, 0.0, 5.0);
@@ -551,6 +552,12 @@ function init(){
         uniform_inputs[i].onpointerdown = hide_modal;
         uniform_inputs[i].onpointerup = show_modal;
     }
+
+    let bg_color_picker = document.getElementById('background_color');
+    bg_color_picker.oninput = function(){
+        layers[1].clear_color = hex2rgba(bg_color_picker.value);
+    };
+
 
     let loop = function(){
         draw_layers();
