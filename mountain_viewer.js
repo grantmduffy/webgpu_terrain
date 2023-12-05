@@ -202,11 +202,11 @@ let default_settings = [];
 function get_event_xy(event){
     var event_x, event_y;
     if (event.type.startsWith('mouse')){
-        event_x = event.offsetX;
-        event_y = event.offsetY;
+        event_x = event.offsetX / gl.canvas.width;
+        event_y = event.offsetY / gl.canvas.height;
     } else {
-        event_x = event.touches[0].clientX;
-        event_y = event.touches[0].clientY;
+        event_x = event.touches[0].clientX / gl.canvas.width;
+        event_y = event.touches[0].clientY / gl.canvas.height;
         // event.preventDefault();
     }
     return [event_x, event_y];
@@ -376,6 +376,9 @@ function get_walls(){
 }
 
 function update_canvas(entries){
+
+    console.log(uniforms['mouse'].value);
+
     // console.log('update canvas');
     let entry = entries[0];
     let width;
@@ -558,8 +561,8 @@ function init(){
 
         mat4.identity(uniforms['M_proj'].value);
         mat4.translate(uniforms['M_proj'].value, uniforms['M_proj'].value, [0, 0, -200]);
-        mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian(-uniforms['mouse'].value[1] * 90 / canvas.height), [1, 0, 0]);
-        mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian((uniforms['mouse'].value[0] - 0.5) * 360 / canvas.width), [0, 0, 1]);
+        mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian(-uniforms['mouse'].value[1] * 360), [1, 0, 0]);
+        mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian((uniforms['mouse'].value[0] - 0.5) * 360), [0, 0, 1]);
         mat4.multiply(uniforms['M_proj'].value, M_perpective, uniforms['M_proj'].value);
 
         mat4.identity(uniforms['M_sun'].value);
