@@ -241,7 +241,6 @@ function mouse_move(event){
         uniforms['buttons'].value = event.buttons;
     }
     if (d != null && d_last != null){
-        console.log(d - d_last);
         mouse_zoom += 0.5 * (d - d_last);
     }
     d_last = d;
@@ -512,7 +511,7 @@ function init(){
     add_uniform('ao_eps', 'float', 7.5, true, 0., 30);
     add_uniform('ao_power', 'float', 1.5, true, 0, 10);
     add_uniform('shadow_eps', 'float', 0.001, true, 0., 0.01);
-    add_uniform('eps', 'float', 0.1, true, 0., 1.);
+    add_uniform('eps', 'float', 0.01, true, 0., 1.);
     // add_uniform('n_ao', 'int', 2, true, 0, 10);
     // add_uniform('n_shadow', 'int', 2, true, 0, 10);
 
