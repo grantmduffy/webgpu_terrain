@@ -78,8 +78,10 @@
     onmousedown="mouse_down(event);mouse_move(event);"
     ontouchstart="mouse_down(event);mouse_move(event);"
     
-    onmousemove="mouse_move(event);" 
+    onmousemove="mouse_move(event);"
     ontouchmove="mouse_move(event);"
+
+    onmousewheel="handle_scroll(event);"
 
     onmouseup="mouse_up(event);"
     ontouchend="mouse_up(event);"

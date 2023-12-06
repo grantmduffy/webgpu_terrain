@@ -196,25 +196,43 @@ let ortho_fov = 100.;
 let ortho_depth = 800.;
 var mouse_down_pos = [0, 0];
 var mouse_pos = [0, 0];
+var mouse_zoom = -200
+var d_last = null;
 var mouse_is_down = false;
 let default_settings = [];
 
 
+function handle_scroll(event){
+    mouse_zoom += event.wheelDelta;
+    mouse_zoom = Math.min(0, mouse_zoom);
+}
+
+
 function get_event_xy(event){
     var event_x, event_y;
+    var d = null;
     if (event.type.startsWith('mouse')){
         event_x = event.offsetX / gl.canvas.width;
         event_y = event.offsetY / gl.canvas.height;
     } else {
-        event_x = event.touches[0].clientX / gl.canvas.width;
-        event_y = event.touches[0].clientY / gl.canvas.height;
+        
         // event.preventDefault();
+        if (event.touches.length == 2){
+            let [x1, y1] = [event.touches[0].clientX, event.touches[0].clientY];
+            let [x2, y2] = [event.touches[1].clientX, event.touches[1].clientY];
+            d = ((x1 - x2) ** 2 + (y1 - y2) ** 2) ** 0.5;
+            event_x = 0.5 * (x1 + x2) / gl.canvas.width;
+            event_y = 0.5 * (y1 + y2) / gl.canvas.height;
+        } else {
+            event_x = event.touches[0].clientX / gl.canvas.width;
+            event_y = event.touches[0].clientY / gl.canvas.height;
+        }
     }
-    return [event_x, event_y];
+    return [event_x, event_y, d];
 }
 
 function mouse_move(event){
-    var [event_x, event_y] = get_event_xy(event);
+    var [event_x, event_y, d] = get_event_xy(event);
     if ('mouse' in uniforms && mouse_is_down){
         uniforms['mouse'].value[0] = event_x - mouse_down_pos[0] + mouse_pos[0];
         uniforms['mouse'].value[1] = (event.srcElement.height - event_y) - mouse_down_pos[1] + mouse_pos[1];    
@@ -222,19 +240,26 @@ function mouse_move(event){
     if ('buttons' in uniforms){
         uniforms['buttons'].value = event.buttons;
     }
+    if (d != null && d_last != null){
+        console.log(d - d_last);
+        mouse_zoom += 0.5 * (d - d_last);
+    }
+    d_last = d;
 }
 
 function mouse_down(event){
-    var [event_x, event_y] = get_event_xy(event);
+    var [event_x, event_y, d] = get_event_xy(event);
     mouse_is_down = true;
     mouse_down_pos[0] = event_x;
     mouse_down_pos[1] = event.srcElement.height - event_y;
+    d_last = d;
 }
 
 function mouse_up(event){
     mouse_is_down = false;
     mouse_pos[0] = uniforms['mouse'].value[0];
     mouse_pos[1] = uniforms['mouse'].value[1];
+    d_last = null;
 }
 
 
@@ -561,7 +586,7 @@ function init(){
         setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
 
         mat4.identity(uniforms['M_proj'].value);
-        mat4.translate(uniforms['M_proj'].value, uniforms['M_proj'].value, [0, 0, -200]);
+        mat4.translate(uniforms['M_proj'].value, uniforms['M_proj'].value, [0, 0, mouse_zoom]);
         mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian(-uniforms['mouse'].value[1] * 360), [1, 0, 0]);
         mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian((uniforms['mouse'].value[0] - 0.5) * 360), [0, 0, 1]);
         mat4.multiply(uniforms['M_proj'].value, M_perpective, uniforms['M_proj'].value);
