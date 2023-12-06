@@ -32,8 +32,6 @@ void main(){
         1.
     );
     gl_Position = M_proj_sun * world_coord;
-    // gl_Position = world_coord * M_proj_sun;
-    gl_Position.xy = (gl_Position.xy + 1.) * sun_res / canvas_res - 1.;
 }
 `;
 
@@ -42,18 +40,16 @@ varying vec2 uv;
 
 void main(){
     gl_FragColor = vec4(0., gl_FragCoord.z, texture2D(elevation, uv).y, 1.);
-    // gl_FragColor = vec4(1., gl_FragCoord.xy / sun_res, 1.);
 }
 `;
 
 let camera_vs_src = `
 attribute vec2 vert_pos;
-varying vec2 uv;
 varying vec4 uv_sun;
 varying vec4 world_coord;
 
 void main(){
-    uv = vert_pos + 0.5;
+    vec2 uv = vert_pos + 0.5;
     world_coord = vec4(
         vert_pos * vec2(print_width, print_height), 
         texture2D(elevation, uv).x - (elev_range.y + elev_range.x) / 2.,
@@ -61,12 +57,10 @@ void main(){
     );
     gl_Position = M_proj * world_coord;
     uv_sun = (M_proj_sun * world_coord) / 2. + 0.5;
-    // uv_sun.xy *= canvas_res / sun_res;
 }
 `;
 
 let camera_fs_src = `
-// varying vec2 uv;
 varying vec4 uv_sun;
 varying vec4 world_coord;
 
@@ -114,10 +108,11 @@ void main(){
     // shadow map
     float shadow_val = 0.;
     for (int i = 0; i < n_shadow; i++){
-        float shadow_depth = texture2D(sun_layer, uv_sun.xy + shadow_eps * rand_2d(uv_sun.xy + float(i))).g - uv_sun.z + eps;
+        float shadow_depth = texture2D(sun_layer, uv_sun.xy + shadow_softness * rand_2d(uv_sun.xy + float(i))).g - uv_sun.z + shadow_eps;
         shadow_val += float(shadow_depth > 0.);
     }
     shadow_val /= float(n_shadow);
+    // float shadow_val = 1.;
     rgb_intensity += shadow_val * sun_color.rgb * sun_intensity * clamp(dot(norm, sun_vector.xyz), 0., 1.);
     
     // convert to rgb
@@ -142,7 +137,6 @@ void main(){
     xyz = vec3(
         vert_pos.xy * vec2(print_width, print_height) / 2.,
         vert_pos.z * (elev_range.y - elev_range.x + base_thickness * 2.) / 2. - base_thickness
-        // vert_pos.z * (elev_range.y - elev_range.x + base_thickness) - 0.5 * (elev_range.y - elev_range.x) - base_thickness
     );
     uv = (vert_pos.xy + 1.) / 2.;
     gl_Position = M_proj * vec4(xyz, 1.);
@@ -202,25 +196,43 @@ let ortho_fov = 100.;
 let ortho_depth = 800.;
 var mouse_down_pos = [0, 0];
 var mouse_pos = [0, 0];
+var mouse_zoom = -200
+var d_last = null;
 var mouse_is_down = false;
 let default_settings = [];
 
 
+function handle_scroll(event){
+    mouse_zoom += event.wheelDelta;
+    mouse_zoom = Math.min(0, mouse_zoom);
+}
+
+
 function get_event_xy(event){
     var event_x, event_y;
+    var d = null;
     if (event.type.startsWith('mouse')){
-        event_x = event.offsetX;
-        event_y = event.offsetY;
+        event_x = event.offsetX / gl.canvas.width;
+        event_y = event.offsetY / gl.canvas.height;
     } else {
-        event_x = event.touches[0].clientX;
-        event_y = event.touches[0].clientY;
+        
         // event.preventDefault();
+        if (event.touches.length == 2){
+            let [x1, y1] = [event.touches[0].clientX, event.touches[0].clientY];
+            let [x2, y2] = [event.touches[1].clientX, event.touches[1].clientY];
+            d = ((x1 - x2) ** 2 + (y1 - y2) ** 2) ** 0.5;
+            event_x = 0.5 * (x1 + x2) / gl.canvas.width;
+            event_y = 0.5 * (y1 + y2) / gl.canvas.height;
+        } else {
+            event_x = event.touches[0].clientX / gl.canvas.width;
+            event_y = event.touches[0].clientY / gl.canvas.height;
+        }
     }
-    return [event_x, event_y];
+    return [event_x, event_y, d];
 }
 
 function mouse_move(event){
-    var [event_x, event_y] = get_event_xy(event);
+    var [event_x, event_y, d] = get_event_xy(event);
     if ('mouse' in uniforms && mouse_is_down){
         uniforms['mouse'].value[0] = event_x - mouse_down_pos[0] + mouse_pos[0];
         uniforms['mouse'].value[1] = (event.srcElement.height - event_y) - mouse_down_pos[1] + mouse_pos[1];    
@@ -228,19 +240,26 @@ function mouse_move(event){
     if ('buttons' in uniforms){
         uniforms['buttons'].value = event.buttons;
     }
+    if (d != null && d_last != null){
+        console.log(d - d_last);
+        mouse_zoom += 0.5 * (d - d_last);
+    }
+    d_last = d;
 }
 
 function mouse_down(event){
-    var [event_x, event_y] = get_event_xy(event);
+    var [event_x, event_y, d] = get_event_xy(event);
     mouse_is_down = true;
     mouse_down_pos[0] = event_x;
     mouse_down_pos[1] = event.srcElement.height - event_y;
+    d_last = d;
 }
 
 function mouse_up(event){
     mouse_is_down = false;
     mouse_pos[0] = uniforms['mouse'].value[0];
     mouse_pos[1] = uniforms['mouse'].value[1];
+    d_last = null;
 }
 
 
@@ -383,6 +402,9 @@ function get_walls(){
 }
 
 function update_canvas(entries){
+
+    console.log(uniforms['mouse'].value);
+
     // console.log('update canvas');
     let entry = entries[0];
     let width;
@@ -414,7 +436,7 @@ function update_canvas(entries){
     [canvas.width, canvas.height] = [displayWidth, displayHeight];
     mat4.perspective(M_perpective, glMatrix.toRadian(45), displayWidth / displayHeight, 0.1, ortho_depth);
     uniforms['canvas_res'].value = [displayWidth, displayHeight];
-    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    // gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 }
 
 function hide_modal(){
@@ -481,15 +503,16 @@ function init(){
     add_uniform('sun_intensity', 'float', 1.7, true, 0., 5.);
     add_uniform('ambient_color', 'vec4', [0.56, 0.75, 1.0, 1.0], true);
     add_uniform('ambient_intensity', 'float', .55, true, 0., 2.);
+    add_uniform('background_color', 'vec4', [0, 0, 0, 1], true);
     add_uniform('exposure', 'float', 2.2, true, 0., 10.);
     add_uniform('ambient_occlusion', 'float', 1.3 , true, 0., 3.);
     add_uniform('gamma', 'float', 2.0, true, 0.0, 5.0);
     add_uniform('base_thickness', 'float', 8., true, 0., 30.);
-    add_uniform('shadow_softness', 'float', 0.5, true, 0., 1.);
+    add_uniform('shadow_softness', 'float', 0.004, true, 0., 0.01);
     add_uniform('ao_eps', 'float', 7.5, true, 0., 30);
     add_uniform('ao_power', 'float', 1.5, true, 0, 10);
-    add_uniform('shadow_eps', 'float', 0.004, true, 0., 0.01);
-    add_uniform('eps', 'float', 0.001, true, 0., 0.003);
+    add_uniform('shadow_eps', 'float', 0.001, true, 0., 0.01);
+    add_uniform('eps', 'float', 0.1, true, 0., 1.);
     // add_uniform('n_ao', 'int', 2, true, 0, 10);
     // add_uniform('n_shadow', 'int', 2, true, 0, 10);
 
@@ -552,14 +575,20 @@ function init(){
         uniform_inputs[i].onpointerup = show_modal;
     }
 
+    let bg_color_picker = document.getElementById('background_color');
+    bg_color_picker.oninput = function(){
+        layers[1].clear_color = hex2rgba(bg_color_picker.value);
+    };
+
+
     let loop = function(){
         draw_layers();
         setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
 
         mat4.identity(uniforms['M_proj'].value);
-        mat4.translate(uniforms['M_proj'].value, uniforms['M_proj'].value, [0, 0, -200]);
-        mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian(-uniforms['mouse'].value[1] * 90 / canvas.height), [1, 0, 0]);
-        mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian((uniforms['mouse'].value[0] - 0.5) * 360 / canvas.width), [0, 0, 1]);
+        mat4.translate(uniforms['M_proj'].value, uniforms['M_proj'].value, [0, 0, mouse_zoom]);
+        mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian(-uniforms['mouse'].value[1] * 360), [1, 0, 0]);
+        mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian((uniforms['mouse'].value[0] - 0.5) * 360), [0, 0, 1]);
         mat4.multiply(uniforms['M_proj'].value, M_perpective, uniforms['M_proj'].value);
 
         mat4.identity(uniforms['M_sun'].value);
