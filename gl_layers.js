@@ -1,7 +1,6 @@
 var global_glsl = `
 precision highp float;
-// precision mediump float;
-// precision lowp float;
+precision highp sampler2D;
 `;
 
 var gl = null;
