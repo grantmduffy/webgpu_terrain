@@ -1,6 +1,6 @@
 var global_glsl = `
 precision highp float;
-// precision mediump float;
+precision highp sampler2D;
 `;
 
 var gl = null;
@@ -39,6 +39,7 @@ function setup_gl(canvas, cull=null, depth_test=true){
     gl = canvas.getContext('webgl');
     gl.getExtension("OES_texture_float");
     gl.getExtension("OES_texture_float_linear");
+    gl.disable(gl.DITHER);
     if (depth_test) gl.enable(gl.DEPTH_TEST);
     if (cull != null){
         gl.enable(gl.CULL_FACE);
