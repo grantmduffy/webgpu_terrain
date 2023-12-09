@@ -125,7 +125,7 @@ void main(){
 }
 `;
 
-wall_vs_src = `
+let wall_vs_src = `
 attribute vec3 vert_pos;
 attribute vec3 norm;
 varying vec3 xyz;
@@ -144,7 +144,7 @@ void main(){
 }
 `;
 
-wall_fs_src = `
+let wall_fs_src = `
 varying vec3 norm_vec;
 varying vec2 uv;
 varying vec3 xyz;
@@ -165,7 +165,7 @@ void main(){
 }
 `;
 
-debug_vs_src = `
+let debug_vs_src = `
 attribute vec2 vert_pos;
 
 void main(){
@@ -173,7 +173,7 @@ void main(){
 }
 `;
 
-debug_fs_src = `
+let debug_fs_src = `
 void main(){
     vec2 uv = gl_FragCoord.xy / canvas_res;
     gl_FragColor = vec4(1., uv, 1.);
@@ -181,6 +181,41 @@ void main(){
     gl_FragColor = mix(gl_FragColor * 0.5, sun, sun.a);
 }
 `;
+
+let wall_sun_vs_src = `
+attribute vec3 vert_pos;
+attribute vec3 norm;
+varying vec3 xyz;
+varying vec3 norm_vec;
+varying vec2 uv;
+
+void main(){
+    float z;
+    xyz = vec3(
+        vert_pos.xy * vec2(print_width, print_height) / 2.,
+        vert_pos.z * (elev_range.y - elev_range.x + base_thickness * 2.) / 2. - base_thickness
+    );
+    uv = (vert_pos.xy + 1.) / 2.;
+    gl_Position = M_proj_sun * vec4(xyz, 1.);
+    norm_vec = norm;
+}
+`;
+
+let wall_sun_fs_src = `
+varying vec2 uv;
+varying vec3 xyz;
+
+void main(){
+    gl_FragColor = vec4(0., gl_FragCoord.z, texture2D(elevation, uv).y, 1.);
+    if (xyz.z - .3 > texture2D(elevation, uv).x - (elev_range.y + elev_range.x) / 2.){
+        gl_FragColor.a = 0.0;
+    }
+    // gl_FragColor = vec4(1., uv, 1.);
+}
+`;
+
+// TODO: Warning if not in chrome
+// TODO: Loading animation when loading new model
 
 let fps = 60;
 var rect_tris, rect_verts;
@@ -519,7 +554,10 @@ function init(){
     let rect_tri_buffer = create_buffer(new Uint16Array(rect_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
     let wall_vert_buffer = create_buffer(new Float32Array(wall_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let wall_tri_buffer = create_buffer(new Uint16Array(wall_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
-    
+    let sun_fbo = create_fbo(sun_res, sun_res);
+    let sun_tex1 = create_texture(sun_res, sun_res, [1., 0., 0., 1.], 0, 'clamp');
+    let sun_tex2 = create_texture(sun_res, sun_res, [0., 1., 0., 1.], 0, 'clamp');
+
     add_layer(
         'sun_layer',
         sun_vs_src,
@@ -527,11 +565,22 @@ function init(){
         rect_vert_buffer,
         rect_tri_buffer,
         rect_tris.length,
-        true,
-        create_fbo(sun_res, sun_res),
-        create_texture(sun_res, sun_res, [1., 0., 0., 1.], 0, 'clamp'),
-        create_texture(sun_res, sun_res, [0., 1., 0., 1.], 0, 'clamp'),
-        false, [0, 1000, 0, 0]
+        true, sun_fbo,
+        sun_tex1, sun_tex2,
+        false,
+    );
+
+    add_layer(
+        'wall_sun_layer',
+        wall_sun_vs_src,
+        wall_sun_fs_src,
+        wall_vert_buffer,
+        wall_tri_buffer,
+        wall_tris.length,
+        false, sun_fbo,
+        sun_tex1, sun_tex2,
+        true, [0, 1000, 0, 0],
+        3, [['norm', 3]]
     );
 
     add_layer(
