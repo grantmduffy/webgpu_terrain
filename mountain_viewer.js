@@ -327,12 +327,12 @@ function load_file(event){
     file_reader.addEventListener('load', (event) =>{
         try {
             load_data(event.target.result);
+            name_el = document.getElementById('model_name');
+            name_el.innerText = file.name;
         } catch (err) {
             console.log(err);
             failed_to_load(file.name);
         }
-        name_el = document.getElementById('model_name');
-        name_el.innerText = file.name;
     });
     file_reader.readAsArrayBuffer(file);
 }
