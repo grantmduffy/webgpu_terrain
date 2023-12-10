@@ -125,7 +125,7 @@ void main(){
 }
 `;
 
-wall_vs_src = `
+let wall_vs_src = `
 attribute vec3 vert_pos;
 attribute vec3 norm;
 varying vec3 xyz;
@@ -144,7 +144,7 @@ void main(){
 }
 `;
 
-wall_fs_src = `
+let wall_fs_src = `
 varying vec3 norm_vec;
 varying vec2 uv;
 varying vec3 xyz;
@@ -165,7 +165,7 @@ void main(){
 }
 `;
 
-debug_vs_src = `
+let debug_vs_src = `
 attribute vec2 vert_pos;
 
 void main(){
@@ -173,12 +173,44 @@ void main(){
 }
 `;
 
-debug_fs_src = `
+let debug_fs_src = `
 void main(){
     vec2 uv = gl_FragCoord.xy / canvas_res;
     gl_FragColor = vec4(1., uv, 1.);
     vec4 sun = texture2D(sun_layer, uv);
     gl_FragColor = mix(gl_FragColor * 0.5, sun, sun.a);
+}
+`;
+
+let wall_sun_vs_src = `
+attribute vec3 vert_pos;
+attribute vec3 norm;
+varying vec3 xyz;
+varying vec3 norm_vec;
+varying vec2 uv;
+
+void main(){
+    float z;
+    xyz = vec3(
+        vert_pos.xy * vec2(print_width, print_height) / 2.,
+        vert_pos.z * (elev_range.y - elev_range.x + base_thickness * 2.) / 2. - base_thickness
+    );
+    uv = (vert_pos.xy + 1.) / 2.;
+    gl_Position = M_proj_sun * vec4(xyz, 1.);
+    norm_vec = norm;
+}
+`;
+
+let wall_sun_fs_src = `
+varying vec2 uv;
+varying vec3 xyz;
+
+void main(){
+    gl_FragColor = vec4(0., gl_FragCoord.z, texture2D(elevation, uv).y, 1.);
+    if (xyz.z - .3 > texture2D(elevation, uv).x - (elev_range.y + elev_range.x) / 2.){
+        gl_FragColor.a = 0.0;
+    }
+    // gl_FragColor = vec4(1., uv, 1.);
 }
 `;
 
@@ -264,6 +296,8 @@ function mouse_up(event){
 
 function load_file(event){
     let file = event.target.files[0];
+    let loading_div = document.getElementById('loading-bar');
+    loading_div.innerText = 'Loading ' + file;
     console.log(file);
     let file_reader = new FileReader();
     file_reader.addEventListener('load', (event) =>{
@@ -276,6 +310,8 @@ function load_file(event){
 
 
 function load_url(path, name=null){
+    let loading_div = document.getElementById('loading-bar');
+    loading_div.innerText = 'Loading ' + name;
     let req = new XMLHttpRequest();
     req.open('GET', path);
     req.responseType = 'arraybuffer';
@@ -294,6 +330,8 @@ function load_url(path, name=null){
 
 
 function load_data(buffer){
+    let loading_div = document.getElementById('loading-bar');
+    loading_div.style.display = 'unset';
     let shape = new Uint16Array(buffer.slice(0, 4));
     let range = new Float32Array(buffer.slice(4, 12));
     let size = new Float32Array(buffer.slice(12, 20))
@@ -313,6 +351,7 @@ function load_data(buffer){
     for (var i = 0; i < 16; i++) M_corners[i] = m[i];
     create_texture(shape[1], shape[0], img_data_rgba, elevation_texture_offset);
     console.log(`new elevation data loaded (${shape[0]}x${shape[1]})`);
+    loading_div.style.display = 'none';
 }
 
 
@@ -470,6 +509,13 @@ function reset_to_defaults(){
 }
 
 function init(){
+
+    // warn if not running in chrome
+    var isChrome = navigator.userAgent.includes('Chrome');
+    if (!isChrome){
+        alert('This page is only supported in Chrome, results in other browsers may vary.');
+    }
+
     let canvas = document.getElementById('gl-canvas');
     let observer = new ResizeObserver(update_canvas);
     observer.observe(canvas, {box: 'device-pixel-content-box'});
@@ -519,7 +565,10 @@ function init(){
     let rect_tri_buffer = create_buffer(new Uint16Array(rect_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
     let wall_vert_buffer = create_buffer(new Float32Array(wall_verts.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let wall_tri_buffer = create_buffer(new Uint16Array(wall_tris.flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
-    
+    let sun_fbo = create_fbo(sun_res, sun_res);
+    let sun_tex1 = create_texture(sun_res, sun_res, [1., 0., 0., 1.], 0, 'clamp');
+    let sun_tex2 = create_texture(sun_res, sun_res, [0., 1., 0., 1.], 0, 'clamp');
+
     add_layer(
         'sun_layer',
         sun_vs_src,
@@ -527,11 +576,22 @@ function init(){
         rect_vert_buffer,
         rect_tri_buffer,
         rect_tris.length,
-        true,
-        create_fbo(sun_res, sun_res),
-        create_texture(sun_res, sun_res, [1., 0., 0., 1.], 0, 'clamp'),
-        create_texture(sun_res, sun_res, [0., 1., 0., 1.], 0, 'clamp'),
-        false, [0, 1000, 0, 0]
+        true, sun_fbo,
+        sun_tex1, sun_tex2,
+        false,
+    );
+
+    add_layer(
+        'wall_sun_layer',
+        wall_sun_vs_src,
+        wall_sun_fs_src,
+        wall_vert_buffer,
+        wall_tri_buffer,
+        wall_tris.length,
+        false, sun_fbo,
+        sun_tex1, sun_tex2,
+        true, [0, 1000, 0, 0],
+        3, [['norm', 3]]
     );
 
     add_layer(
