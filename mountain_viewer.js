@@ -294,11 +294,27 @@ function mouse_up(event){
 }
 
 
+function show_loading(item){
+    let spinner = document.getElementById('loading-spinner');
+    let status = document.getElementById('loading-status');
+    status.innerText = 'Loading ' + item;
+    spinner.style.display = 'unset';
+    status.style.display = 'unset';
+}
+
+
+function hide_loading(){
+    let spinner = document.getElementById('loading-spinner');
+    let status = document.getElementById('loading-status');
+    spinner.style.display = 'none';
+    status.style.display = 'none';
+}
+
+
+
 function load_file(event){
     let file = event.target.files[0];
-    let loading_div = document.getElementById('loading-bar');
-    loading_div.innerText = 'Loading ' + file;
-    console.log(file);
+    show_loading(file.name);
     let file_reader = new FileReader();
     file_reader.addEventListener('load', (event) =>{
         load_data(event.target.result);
@@ -310,8 +326,7 @@ function load_file(event){
 
 
 function load_url(path, name=null){
-    let loading_div = document.getElementById('loading-bar');
-    loading_div.innerText = 'Loading ' + name;
+    show_loading(name);
     let req = new XMLHttpRequest();
     req.open('GET', path);
     req.responseType = 'arraybuffer';
@@ -329,9 +344,7 @@ function load_url(path, name=null){
 }
 
 
-function load_data(buffer){
-    let loading_div = document.getElementById('loading-bar');
-    loading_div.style.display = 'unset';
+async function load_data(buffer){
     let shape = new Uint16Array(buffer.slice(0, 4));
     let range = new Float32Array(buffer.slice(4, 12));
     let size = new Float32Array(buffer.slice(12, 20))
@@ -351,7 +364,7 @@ function load_data(buffer){
     for (var i = 0; i < 16; i++) M_corners[i] = m[i];
     create_texture(shape[1], shape[0], img_data_rgba, elevation_texture_offset);
     console.log(`new elevation data loaded (${shape[0]}x${shape[1]})`);
-    loading_div.style.display = 'none';
+    hide_loading();
 }
 
 
@@ -440,8 +453,6 @@ function get_walls(){
 }
 
 function update_canvas(entries){
-
-    console.log(uniforms['mouse'].value);
 
     // console.log('update canvas');
     let entry = entries[0];
