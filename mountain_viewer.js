@@ -214,9 +214,6 @@ void main(){
 }
 `;
 
-// TODO: Warning if not in chrome
-// TODO: Loading animation when loading new model
-
 let fps = 60;
 var rect_tris, rect_verts;
 var camera_dist = 100.;
@@ -299,6 +296,8 @@ function mouse_up(event){
 
 function load_file(event){
     let file = event.target.files[0];
+    let loading_div = document.getElementById('loading-bar');
+    loading_div.innerText = 'Loading ' + file;
     console.log(file);
     let file_reader = new FileReader();
     file_reader.addEventListener('load', (event) =>{
@@ -311,6 +310,8 @@ function load_file(event){
 
 
 function load_url(path, name=null){
+    let loading_div = document.getElementById('loading-bar');
+    loading_div.innerText = 'Loading ' + name;
     let req = new XMLHttpRequest();
     req.open('GET', path);
     req.responseType = 'arraybuffer';
@@ -329,6 +330,8 @@ function load_url(path, name=null){
 
 
 function load_data(buffer){
+    let loading_div = document.getElementById('loading-bar');
+    loading_div.style.display = 'unset';
     let shape = new Uint16Array(buffer.slice(0, 4));
     let range = new Float32Array(buffer.slice(4, 12));
     let size = new Float32Array(buffer.slice(12, 20))
@@ -348,6 +351,7 @@ function load_data(buffer){
     for (var i = 0; i < 16; i++) M_corners[i] = m[i];
     create_texture(shape[1], shape[0], img_data_rgba, elevation_texture_offset);
     console.log(`new elevation data loaded (${shape[0]}x${shape[1]})`);
+    loading_div.style.display = 'none';
 }
 
 
@@ -505,6 +509,13 @@ function reset_to_defaults(){
 }
 
 function init(){
+
+    // warn if not running in chrome
+    var isChrome = navigator.userAgent.includes('Chrome');
+    if (!isChrome){
+        alert('This page is only supported in Chrome, results in other browsers may vary.');
+    }
+
     let canvas = document.getElementById('gl-canvas');
     let observer = new ResizeObserver(update_canvas);
     observer.observe(canvas, {box: 'device-pixel-content-box'});
