@@ -311,13 +311,26 @@ function hide_loading(){
 }
 
 
+function failed_to_load(name){
+    alert('Failed to load ' + name);
+    hide_loading();
+}
+
 
 function load_file(event){
     let file = event.target.files[0];
+    if (file.name === undefined){
+        return;
+    }
     show_loading(file.name);
     let file_reader = new FileReader();
     file_reader.addEventListener('load', (event) =>{
-        load_data(event.target.result);
+        try {
+            load_data(event.target.result);
+        } catch (err) {
+            console.log(err);
+            failed_to_load(file.name);
+        }
         name_el = document.getElementById('model_name');
         name_el.innerText = file.name;
     });
@@ -332,19 +345,26 @@ function load_url(path, name=null){
     req.responseType = 'arraybuffer';
     req.onreadystatechange = function(){
         if (this.readyState == 4 && this.status == 200){
-            load_data(req.response);
-            if (name == null){
-                name = path;
+            try {
+                load_data(req.response);
+                if (name == null){
+                    name = path;
+                }
+                name_el = document.getElementById('model_name');
+                name_el.innerText = name;
+            } catch (err) {
+                console.llg(err);
+                failed_to_load(name);
             }
-            name_el = document.getElementById('model_name');
-            name_el.innerText = name;
+        } else if (this.readyState == 4){
+            failed_to_load(name);
         }
     }
     req.send();
 }
 
 
-async function load_data(buffer){
+function load_data(buffer){
     let shape = new Uint16Array(buffer.slice(0, 4));
     let range = new Float32Array(buffer.slice(4, 12));
     let size = new Float32Array(buffer.slice(12, 20))
