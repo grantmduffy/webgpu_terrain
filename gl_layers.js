@@ -36,9 +36,11 @@ function rgba2hex(vals){
 function setup_gl(canvas, cull=null, depth_test=true){
     let rect = canvas.getBoundingClientRect();
     canvas.oncontextmenu = function(e) { e.preventDefault(); e.stopPropagation(); }
-    gl = canvas.getContext('webgl');
+    gl = canvas.getContext('webgl', {preserveDrawingBuffer: true});
     gl.getExtension("OES_texture_float");
     gl.getExtension("OES_texture_float_linear");
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.pixelStorei(gl.PACK_ALIGNMENT, 1);
     gl.disable(gl.DITHER);
     if (depth_test) gl.enable(gl.DEPTH_TEST);
     if (cull != null){
@@ -124,10 +126,9 @@ function create_fbo(width, height){
     return fbo;
 }
 
-function download_texture(){
-    // TODO: get working
-    let buffer = new Float32Array(width * height * 4);
-    gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, buffer);
+function download_texture(width, height){
+    let buffer = new Uint8Array(gl.canvas.width * gl.canvas.height * 4);
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, buffer);
     return buffer;
 }
 

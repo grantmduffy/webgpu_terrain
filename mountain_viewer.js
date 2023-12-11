@@ -232,6 +232,8 @@ var mouse_zoom = -200
 var d_last = null;
 var mouse_is_down = false;
 let default_settings = [];
+var download_dom = null;
+var dummy_img = null;
 
 
 function handle_scroll(event){
@@ -311,15 +313,35 @@ function hide_loading(){
 }
 
 
+function failed_to_load(name){
+    alert('Failed to load ' + name);
+    hide_loading();
+}
+
+
+function download_render(){
+    download_dom.href = gl.canvas.toDataURL('image/png');;
+    download_dom.download = document.getElementById('model_name').innerText.toLowerCase().replace(' ', '_').replace(/[\W]+/g, '') + '.png';
+    download_dom.click();
+}
+
 
 function load_file(event){
     let file = event.target.files[0];
+    if (file.name === undefined){
+        return;
+    }
     show_loading(file.name);
     let file_reader = new FileReader();
     file_reader.addEventListener('load', (event) =>{
-        load_data(event.target.result);
-        name_el = document.getElementById('model_name');
-        name_el.innerText = file.name;
+        try {
+            load_data(event.target.result);
+            name_el = document.getElementById('model_name');
+            name_el.innerText = file.name;
+        } catch (err) {
+            console.log(err);
+            failed_to_load(file.name);
+        }
     });
     file_reader.readAsArrayBuffer(file);
 }
@@ -332,19 +354,26 @@ function load_url(path, name=null){
     req.responseType = 'arraybuffer';
     req.onreadystatechange = function(){
         if (this.readyState == 4 && this.status == 200){
-            load_data(req.response);
-            if (name == null){
-                name = path;
+            try {
+                load_data(req.response);
+                if (name == null){
+                    name = path;
+                }
+                name_el = document.getElementById('model_name');
+                name_el.innerText = name;
+            } catch (err) {
+                console.llg(err);
+                failed_to_load(name);
             }
-            name_el = document.getElementById('model_name');
-            name_el.innerText = name;
+        } else if (this.readyState == 4){
+            failed_to_load(name);
         }
     }
     req.send();
 }
 
 
-async function load_data(buffer){
+function load_data(buffer){
     let shape = new Uint16Array(buffer.slice(0, 4));
     let range = new Float32Array(buffer.slice(4, 12));
     let size = new Float32Array(buffer.slice(12, 20))
@@ -526,6 +555,9 @@ function init(){
     if (!isChrome){
         alert('This page is only supported in Chrome, results in other browsers may vary.');
     }
+
+    download_dom = document.getElementById('png-download');
+    dummy_img = document.getElementById('dummy-img');
 
     let canvas = document.getElementById('gl-canvas');
     let observer = new ResizeObserver(update_canvas);
