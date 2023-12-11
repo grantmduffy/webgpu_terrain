@@ -243,6 +243,8 @@ function handle_scroll(event){
 
 
 function get_event_xy(event){
+    if (gl == null) return [-1, -1, 0];
+
     var event_x, event_y;
     var d = null;
     if (event.type.startsWith('mouse')){
@@ -271,9 +273,9 @@ function mouse_move(event){
         uniforms['mouse'].value[0] = event_x - mouse_down_pos[0] + mouse_pos[0];
         uniforms['mouse'].value[1] = (event.srcElement.height - event_y) - mouse_down_pos[1] + mouse_pos[1];    
     }
-    if ('buttons' in uniforms){
-        uniforms['buttons'].value = event.buttons;
-    }
+    // if ('buttons' in uniforms){
+    //     uniforms['buttons'].value = event.buttons;
+    // }
     if (d != null && d_last != null){
         mouse_zoom += 0.5 * (d - d_last);
     }
@@ -320,6 +322,7 @@ function failed_to_load(name){
 
 
 function download_render(){
+    if (gl == null) return;
     download_dom.href = gl.canvas.toDataURL('image/png');;
     download_dom.download = document.getElementById('model_name').innerText.toLowerCase().replace(' ', '_').replace(/[\W]+/g, '') + '.png';
     download_dom.click();
@@ -580,7 +583,7 @@ function init(){
     add_uniform('M_proj_sun', 'mat4', new Float32Array(16));
     add_uniform('M_sun', 'mat4', new Float32Array(16));
     add_uniform('mouse', 'vec2', [0, 0]);
-    add_uniform('buttons', 'int', 0);
+    // add_uniform('buttons', 'int', 0);
     add_uniform('ortho_depth', 'float', ortho_depth);
     add_uniform('elev_range', 'vec2', [0, 1]);
 
