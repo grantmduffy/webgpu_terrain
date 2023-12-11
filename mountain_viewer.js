@@ -232,6 +232,8 @@ var mouse_zoom = -200
 var d_last = null;
 var mouse_is_down = false;
 let default_settings = [];
+var download_dom = null;
+var dummy_img = null;
 
 
 function handle_scroll(event){
@@ -314,6 +316,13 @@ function hide_loading(){
 function failed_to_load(name){
     alert('Failed to load ' + name);
     hide_loading();
+}
+
+
+function download_render(){
+    download_dom.href = gl.canvas.toDataURL('image/png');;
+    download_dom.download = document.getElementById('model_name').innerText.toLowerCase().replace(' ', '_').replace(/[\W]+/g, '') + '.png';
+    download_dom.click();
 }
 
 
@@ -546,6 +555,9 @@ function init(){
     if (!isChrome){
         alert('This page is only supported in Chrome, results in other browsers may vary.');
     }
+
+    download_dom = document.getElementById('png-download');
+    dummy_img = document.getElementById('dummy-img');
 
     let canvas = document.getElementById('gl-canvas');
     let observer = new ResizeObserver(update_canvas);
