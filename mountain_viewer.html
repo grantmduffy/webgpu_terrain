@@ -39,7 +39,9 @@
 </style>
 </head>
 
-<body class="d-flex flex-column" style="height: 100%;"  onload="init()">
+<body style="height: 100%; padding: 0; margin: 0"  onload="init()">
+
+<div class="d-flex flex-column" style="width: 100%; height: 100%;">
 
 <nav class="navbar navbar-expand-sm bg-body-tertiary">
   <div class="container-fluid">
@@ -76,29 +78,44 @@
     </div>
   
     <div id="loading-spinner" class="spinner-border text-primary" role="status"></div>
-    <label for="loading-spinner" id="loading-status">Loading...</div>
+    <label for="loading-spinner" id="loading-status">Loading...</label>
   
   </div>
 </nav>
 
-<div class="flex-grow-1">  
-  <canvas 
-    id="gl-canvas" style="background-color: black; width: 100%; height: 95%; touch-action: none;"
-    
-    onmousedown="mouse_down(event);mouse_move(event);"
-    ontouchstart="mouse_down(event);mouse_move(event);"
-    
-    onmousemove="mouse_move(event);"
-    ontouchmove="mouse_move(event);"
+<div id="canvas-container" class="flex-grow-1">  
+<!-- <div id="canvas-container">   -->
 
-    onmousewheel="handle_scroll(event);"
-
-    onmouseup="mouse_up(event);"
-    ontouchend="mouse_up(event);"
-    onmouseout="mouse_up(event);"
-    onmouseleave="mouse_move(event);"  
-  ></canvas>
 </div>
+
+</div>
+
+<canvas 
+id="gl-canvas" 
+style="
+  background-color: black; 
+  touch-action: none; 
+  display: block; 
+  /* width: 100%; 
+  height: 100%; */
+  position: absolute;
+  top: 0;
+  left: 0;
+"
+
+onmousedown="mouse_down(event);mouse_move(event);"
+ontouchstart="mouse_down(event);mouse_move(event);"
+
+onmousemove="mouse_move(event);"
+ontouchmove="mouse_move(event);"
+
+onmousewheel="handle_scroll(event);"
+
+onmouseup="mouse_up(event);"
+ontouchend="mouse_up(event);"
+onmouseout="mouse_up(event);"
+onmouseleave="mouse_move(event);"  
+></canvas>
 
 <div>
   <div class="modal fade" id="settings_modal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
