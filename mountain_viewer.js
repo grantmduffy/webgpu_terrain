@@ -214,7 +214,7 @@ void main(){
 }
 `;
 
-let fps = 60;
+let fps = 30;
 var rect_tris, rect_verts;
 var camera_dist = 100.;
 let M_perpective = new Float32Array(16);
@@ -234,6 +234,8 @@ var mouse_is_down = false;
 let default_settings = [];
 var download_dom = null;
 var dummy_img = null;
+var canvas = null;
+var canvas_container = null;
 
 
 function handle_scroll(event){
@@ -484,42 +486,6 @@ function get_walls(){
     ]
 }
 
-function update_canvas(entries){
-
-    // console.log('update canvas');
-    let entry = entries[0];
-    let width;
-    let height;
-    let dpr = window.devicePixelRatio;
-    if (entry.devicePixelContentBoxSize) {
-        // NOTE: Only this path gives the correct answer
-        // The other paths are imperfect fallbacks
-        // for browsers that don't provide anyway to do this
-        width = entry.devicePixelContentBoxSize[0].inlineSize;
-        height = entry.devicePixelContentBoxSize[0].blockSize;
-        dpr = 1; // it's already in width and height
-    } else if (entry.contentBoxSize) {
-        if (entry.contentBoxSize[0]) {
-            width = entry.contentBoxSize[0].inlineSize;
-            height = entry.contentBoxSize[0].blockSize;
-        } else {
-            width = entry.contentBoxSize.inlineSize;
-            height = entry.contentBoxSize.blockSize;
-        }
-    } else {
-        width = entry.contentRect.width;
-        height = entry.contentRect.height;
-    }
-    const displayWidth = Math.round(width * dpr);
-    const displayHeight = Math.round(height * dpr);
-    
-    let canvas = entries[0].target;
-    [canvas.width, canvas.height] = [displayWidth, displayHeight];
-    mat4.perspective(M_perpective, glMatrix.toRadian(45), displayWidth / displayHeight, 0.1, ortho_depth);
-    uniforms['canvas_res'].value = [displayWidth, displayHeight];
-    // gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-}
-
 function hide_modal(){
     // console.log('hide modal');
     // document.getElementById('settings_modal').hidden = true;
@@ -562,10 +528,10 @@ function init(){
     download_dom = document.getElementById('png-download');
     dummy_img = document.getElementById('dummy-img');
 
-    let canvas = document.getElementById('gl-canvas');
-    let observer = new ResizeObserver(update_canvas);
-    observer.observe(canvas, {box: 'device-pixel-content-box'});
+    canvas = document.getElementById('gl-canvas');
+    canvas_container = document.getElementById('canvas-container');
     setup_gl(canvas, cull=null, true);
+    let dpr = window.devicePixelRatio;
 
     [rect_verts, rect_tris] = get_mesh(1, 1, 256, 256);
     [wall_verts, wall_tris] = get_walls();
@@ -690,6 +656,16 @@ function init(){
         draw_layers();
         setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
 
+        if (canvas.clientWidth != canvas_container.clientWidth || canvas.clientHeight != canvas_container.clientHeight){
+            rect = canvas_container.getClientRects()[0];
+            canvas.style.top = rect.y + 'px';
+            canvas.style.width = canvas_container.clientWidth + 'px';
+            canvas.style.height = canvas_container.clientHeight + 'px';
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            mat4.perspective(M_perpective, glMatrix.toRadian(45), rect.width / rect.height, 0.1, ortho_depth);    
+        }
+    
         mat4.identity(uniforms['M_proj'].value);
         mat4.translate(uniforms['M_proj'].value, uniforms['M_proj'].value, [0, 0, mouse_zoom]);
         mat4.rotate(uniforms['M_proj'].value, uniforms['M_proj'].value, glMatrix.toRadian(-uniforms['mouse'].value[1] * 360), [1, 0, 0]);
