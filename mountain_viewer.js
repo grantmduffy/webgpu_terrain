@@ -176,9 +176,11 @@ void main(){
 let debug_fs_src = `
 void main(){
     vec2 uv = gl_FragCoord.xy / canvas_res;
-    frag_color = vec4(1., uv, 1.);
-    vec4 sun = texture(sun_layer, uv);
-    frag_color = mix(frag_color * 0.5, sun, sun.a);
+    // frag_color = vec4(1., uv, 1.);
+    // vec4 sun = texture(sun_layer, uv);
+    // frag_color = mix(frag_color * 0.5, sun, sun.a);
+    float elev_val = (texture(elevation, uv).x - elev_range.x) / (elev_range.y - elev_range.x);
+    frag_color = vec4(elev_val, uv, 1.);
 }
 `;
 
@@ -663,7 +665,9 @@ function init(){
             canvas.style.height = canvas_container.clientHeight + 'px';
             canvas.width = rect.width * dpr;
             canvas.height = rect.height * dpr;
-            mat4.perspective(M_perpective, glMatrix.toRadian(45), rect.width / rect.height, 0.1, ortho_depth);    
+            mat4.perspective(M_perpective, glMatrix.toRadian(45), rect.width / rect.height, 0.1, ortho_depth);   
+            uniforms['canvas_res'].value[0] = canvas.width;
+            uniforms['canvas_res'].value[1] = canvas.height; 
         }
     
         mat4.identity(uniforms['M_proj'].value);

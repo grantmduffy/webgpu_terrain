@@ -41,7 +41,7 @@ function setup_gl(canvas, cull=null, depth_test=true){
     canvas.oncontextmenu = function(e) { e.preventDefault(); e.stopPropagation(); }
     gl = canvas.getContext('webgl2', {preserveDrawingBuffer: true});
     // gl.getExtension("OES_texture_float");
-    // gl.getExtension("OES_texture_float_linear");
+    gl.getExtension("OES_texture_float_linear");
     gl.getExtension("EXT_color_buffer_float");
     gl.getExtension("EXT_float_blend");
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
