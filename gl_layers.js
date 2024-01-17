@@ -1,7 +1,9 @@
-var global_glsl = `
+// TODO: move to webgl2
+var global_glsl = `#version 300 es
 precision highp float;
 precision highp int;
 precision highp sampler2D;
+out vec4 frag_color;
 `;
 
 var gl = null;
@@ -37,10 +39,10 @@ function rgba2hex(vals){
 function setup_gl(canvas, cull=null, depth_test=true){
     let rect = canvas.getBoundingClientRect();
     canvas.oncontextmenu = function(e) { e.preventDefault(); e.stopPropagation(); }
-    gl = canvas.getContext('webgl', {preserveDrawingBuffer: true});
-    gl.getExtension("OES_texture_float");
-    gl.getExtension("OES_texture_float_linear");
-    gl.getExtension("WEBGL_color_buffer_float");
+    gl = canvas.getContext('webgl2', {preserveDrawingBuffer: true});
+    // gl.getExtension("OES_texture_float");
+    // gl.getExtension("OES_texture_float_linear");
+    gl.getExtension("EXT_color_buffer_float");
     gl.getExtension("EXT_float_blend");
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     gl.pixelStorei(gl.PACK_ALIGNMENT, 1);
@@ -111,7 +113,7 @@ function create_texture(width, height, color=[0, 0, 0, 1.0], offset=0, edge='cla
     if (color != null && Array.isArray(color)){
         color = new Float32Array(Array(width * height).fill(color).flat());
     }
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.FLOAT, color);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, width, height, 0, gl.RGBA, gl.FLOAT, color);
     texture.width = width;
     texture.height = height;
     return texture;

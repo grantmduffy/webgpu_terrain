@@ -21,14 +21,14 @@ vec3 rand_3d(vec2 co){
 `;
 
 let sun_vs_src = `
-attribute vec2 vert_pos;
-varying vec2 uv;
+in vec2 vert_pos;
+out vec2 uv;
 
 void main(){
     uv = vert_pos + 0.5;
     vec4 world_coord = vec4(
         vert_pos * vec2(print_width, print_height), 
-        texture2D(elevation, uv).x - (elev_range.y + elev_range.x) / 2.,
+        texture(elevation, uv).x - (elev_range.y + elev_range.x) / 2.,
         1.
     );
     gl_Position = M_proj_sun * world_coord;
@@ -36,23 +36,23 @@ void main(){
 `;
 
 let sun_fs_src = `
-varying vec2 uv;
+in vec2 uv;
 
 void main(){
-    gl_FragColor = vec4(0., gl_FragCoord.z, texture2D(elevation, uv).y, 1.);
+    frag_color = vec4(0., gl_FragCoord.z, texture(elevation, uv).y, 1.);
 }
 `;
 
 let camera_vs_src = `
-attribute vec2 vert_pos;
-varying vec4 uv_sun;
-varying vec4 world_coord;
+in vec2 vert_pos;
+out vec4 uv_sun;
+out vec4 world_coord;
 
 void main(){
     vec2 uv = vert_pos + 0.5;
     world_coord = vec4(
         vert_pos * vec2(print_width, print_height), 
-        texture2D(elevation, uv).x - (elev_range.y + elev_range.x) / 2.,
+        texture(elevation, uv).x - (elev_range.y + elev_range.x) / 2.,
         1.
     );
     gl_Position = M_proj * world_coord;
@@ -61,8 +61,8 @@ void main(){
 `;
 
 let camera_fs_src = `
-varying vec4 uv_sun;
-varying vec4 world_coord;
+in vec4 uv_sun;
+in vec4 world_coord;
 
 vec4 convert_colorspace(vec3 intensity){
     return vec4(1. - exp(-exposure * intensity), 1.);
@@ -75,11 +75,11 @@ vec2 world_to_uv(vec2 world){
 void main(){
     vec2 uv = world_to_uv(world_coord.xy);
 
-    vec4 e = texture2D(elevation, uv);
-    vec4 e_n = texture2D(elevation, world_to_uv(world_coord.xy + vec2(0., eps)));
-    vec4 e_s = texture2D(elevation, world_to_uv(world_coord.xy + vec2(0., -eps)));
-    vec4 e_e = texture2D(elevation, world_to_uv(world_coord.xy + vec2(eps, 0.)));
-    vec4 e_w = texture2D(elevation, world_to_uv(world_coord.xy + vec2(-eps, 0.)));
+    vec4 e = texture(elevation, uv);
+    vec4 e_n = texture(elevation, world_to_uv(world_coord.xy + vec2(0., eps)));
+    vec4 e_s = texture(elevation, world_to_uv(world_coord.xy + vec2(0., -eps)));
+    vec4 e_e = texture(elevation, world_to_uv(world_coord.xy + vec2(eps, 0.)));
+    vec4 e_w = texture(elevation, world_to_uv(world_coord.xy + vec2(-eps, 0.)));
     
     vec3 norm = vec3(
         (e_w.x - e_e.x) / (2. * eps),
@@ -91,13 +91,13 @@ void main(){
     vec3 rgb_intensity = ambient_intensity * ambient_color.rgb;
 
     // calculate ambient occlusion
-    float z1 = texture2D(elevation, uv).x;
+    float z1 = texture(elevation, uv).x;
     float curvature = 0.;
     for (int i = 0; i < n_ao; i++){
         vec2 dir = ao_eps * pow(rand_2d(uv + float(i)), vec2(ao_power));
         float dir_len = length(dir);
-        float z0 = texture2D(elevation, world_to_uv(world_coord.xy - dir)).x;
-        float z2 = texture2D(elevation, world_to_uv(world_coord.xy + dir)).x;
+        float z0 = texture(elevation, world_to_uv(world_coord.xy - dir)).x;
+        float z2 = texture(elevation, world_to_uv(world_coord.xy + dir)).x;
         float f1 = (z2 - z0) / (2. * dir_len);
         float f2 = (z2 - 2. * z1 + z0) / (dir_len * dir_len);
         curvature += max(f2 / pow(1. + f1 * f1, 3. / 2.), 0.);
@@ -108,7 +108,7 @@ void main(){
     // shadow map
     float shadow_val = 0.;
     for (int i = 0; i < n_shadow; i++){
-        float shadow_depth = texture2D(sun_layer, uv_sun.xy + shadow_softness * rand_2d(uv_sun.xy + float(i))).g - uv_sun.z + shadow_eps;
+        float shadow_depth = texture(sun_layer, uv_sun.xy + shadow_softness * rand_2d(uv_sun.xy + float(i))).g - uv_sun.z + shadow_eps;
         shadow_val += float(shadow_depth > 0.);
     }
     shadow_val /= float(n_shadow);
@@ -116,21 +116,21 @@ void main(){
     rgb_intensity += shadow_val * sun_color.rgb * sun_intensity * clamp(dot(norm, sun_vector.xyz), 0., 1.);
     
     // convert to rgb
-    gl_FragColor = convert_colorspace(rgb_intensity);
-    gl_FragColor.rgb = pow(gl_FragColor.rgb, vec3(gamma));
+    frag_color = convert_colorspace(rgb_intensity);
+    frag_color.rgb = pow(frag_color.rgb, vec3(gamma));
 
     // debugging
-    // gl_FragColor = vec4(1., uv_sun.xy, 1.);
-    // gl_FragColor = texture2D(sun_layer, (uv_sun.xy + shadow_eps * rand_2d(uv_sun.xy)) * canvas_res / sun_res)
+    // frag_color = vec4(1., uv_sun.xy, 1.);
+    // frag_color = texture(sun_layer, (uv_sun.xy + shadow_eps * rand_2d(uv_sun.xy)) * canvas_res / sun_res)
 }
 `;
 
 let wall_vs_src = `
-attribute vec3 vert_pos;
-attribute vec3 norm;
-varying vec3 xyz;
-varying vec3 norm_vec;
-varying vec2 uv;
+in vec3 vert_pos;
+in vec3 norm;
+out vec3 xyz;
+out vec3 norm_vec;
+out vec2 uv;
 
 void main(){
     float z;
@@ -145,9 +145,9 @@ void main(){
 `;
 
 let wall_fs_src = `
-varying vec3 norm_vec;
-varying vec2 uv;
-varying vec3 xyz;
+in vec3 norm_vec;
+in vec2 uv;
+in vec3 xyz;
 
 vec4 convert_colorspace(vec3 intensity){
     return vec4(1. - exp(-exposure * intensity), 1.);
@@ -157,16 +157,16 @@ void main(){
     vec4 sun_vector = M_sun * vec4(0., 0., 1., 1.);
     vec3 rgb_intensity = ambient_intensity * ambient_color.rgb;
     rgb_intensity += sun_color.rgb * sun_intensity * clamp(dot(norm_vec, sun_vector.xyz), 0., 1.);
-    gl_FragColor = convert_colorspace(rgb_intensity);
-    gl_FragColor.rgb = pow(gl_FragColor.rgb, vec3(gamma));
-    if (xyz.z > texture2D(elevation, uv).x - (elev_range.y + elev_range.x) / 2.){
-        gl_FragColor.a = 0.0;
+    frag_color = convert_colorspace(rgb_intensity);
+    frag_color.rgb = pow(frag_color.rgb, vec3(gamma));
+    if (xyz.z > texture(elevation, uv).x - (elev_range.y + elev_range.x) / 2.){
+        frag_color.a = 0.0;
     }
 }
 `;
 
 let debug_vs_src = `
-attribute vec2 vert_pos;
+in vec2 vert_pos;
 
 void main(){
     gl_Position = vec4(vert_pos, 0., 1.);
@@ -176,18 +176,18 @@ void main(){
 let debug_fs_src = `
 void main(){
     vec2 uv = gl_FragCoord.xy / canvas_res;
-    gl_FragColor = vec4(1., uv, 1.);
-    vec4 sun = texture2D(sun_layer, uv);
-    gl_FragColor = mix(gl_FragColor * 0.5, sun, sun.a);
+    frag_color = vec4(1., uv, 1.);
+    vec4 sun = texture(sun_layer, uv);
+    frag_color = mix(frag_color * 0.5, sun, sun.a);
 }
 `;
 
 let wall_sun_vs_src = `
-attribute vec3 vert_pos;
-attribute vec3 norm;
-varying vec3 xyz;
-varying vec3 norm_vec;
-varying vec2 uv;
+in vec3 vert_pos;
+in vec3 norm;
+out vec3 xyz;
+out vec3 norm_vec;
+out vec2 uv;
 
 void main(){
     float z;
@@ -202,15 +202,15 @@ void main(){
 `;
 
 let wall_sun_fs_src = `
-varying vec2 uv;
-varying vec3 xyz;
+in vec2 uv;
+in vec3 xyz;
 
 void main(){
-    gl_FragColor = vec4(0., gl_FragCoord.z, texture2D(elevation, uv).y, 1.);
-    if (xyz.z - .3 > texture2D(elevation, uv).x - (elev_range.y + elev_range.x) / 2.){
-        gl_FragColor.a = 0.0;
+    frag_color = vec4(0., gl_FragCoord.z, texture(elevation, uv).y, 1.);
+    if (xyz.z - .3 > texture(elevation, uv).x - (elev_range.y + elev_range.x) / 2.){
+        frag_color.a = 0.0;
     }
-    // gl_FragColor = vec4(1., uv, 1.);
+    // frag_color = vec4(1., uv, 1.);
 }
 `;
 
