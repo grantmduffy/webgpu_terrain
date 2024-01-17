@@ -1,13 +1,12 @@
-// python -m http.server 8888
 global_glsl += `
-vec4 sample(sampler2D tex, vec2 uv){
-    return texture2D(tex, uv);
+vec4 sample_tex(sampler2D tex, vec2 uv){
+    return texture(tex, uv);
 }
 `;
 
 let simple_vertex_shader_src = `
-attribute vec2 vert_pos;
-varying vec2 xy;
+in vec2 vert_pos;
+out vec2 xy;
 
 void main(){
     gl_Position = vec4(vert_pos, 0., 1.);
@@ -22,12 +21,12 @@ void main(){
     vec2 uv = gl_FragCoord.xy / tex_res;
 
     // [x: elevation, y: water level, z: sediment, w: none]
-    vec4 b = sample(background_layer, uv);
-    vec4 b_n = sample(background_layer, uv + vec2(0., 1.) / tex_res);
-    vec4 b_s = sample(background_layer, uv + vec2(0., -1.) / tex_res);
-    vec4 b_e = sample(background_layer, uv + vec2(1., 0.) / tex_res);
-    vec4 b_w = sample(background_layer, uv + vec2(-1., 0.) / tex_res);
-    gl_FragColor = b;
+    vec4 b = sample_tex(background_layer, uv);
+    vec4 b_n = sample_tex(background_layer, uv + vec2(0., 1.) / tex_res);
+    vec4 b_s = sample_tex(background_layer, uv + vec2(0., -1.) / tex_res);
+    vec4 b_e = sample_tex(background_layer, uv + vec2(1., 0.) / tex_res);
+    vec4 b_w = sample_tex(background_layer, uv + vec2(-1., 0.) / tex_res);
+    frag_color = b;
 
     // water flow
     vec4 flux = vec4(  // [n, s, e, w]
@@ -36,7 +35,7 @@ void main(){
         clamp(b_e.x + b_e.y - b.x - b.y, -b.y / 4., b_e.y / 4.),
         clamp(b_w.x + b_w.y - b.x - b.y, -b.y / 4., b_w.y / 4.)
     ) * flow_rate;
-    gl_FragColor.y += dot(flux, vec4(1.));
+    frag_color.y += dot(flux, vec4(1.));
 
     // water velocity
     vec2 vel = vec2(
@@ -47,7 +46,7 @@ void main(){
 
     // convect sediment
     // flux * (sediment / water_depth)
-    gl_FragColor.z += dot(
+    frag_color.z += dot(
         flux, 
         vec4(
             clamp(b_n.y == 0. ? 0. : b_n.z / b_n.y, 0., 1.), 
@@ -56,14 +55,14 @@ void main(){
             clamp(b_w.y == 0. ? 0. : b_w.z / b_w.y, 0., 1.)
         )
     );
-    gl_FragColor.z = max(gl_FragColor.z, 0.);
+    frag_color.z = max(frag_color.z, 0.);
     
     float uptake = min(
         vel_mag * K_uptake,
-        vel_mag * gl_FragColor.y * K_sat - gl_FragColor.z
+        vel_mag * frag_color.y * K_sat - frag_color.z
     );
-    gl_FragColor.z += uptake;
-    gl_FragColor.x -= uptake;
+    frag_color.z += uptake;
+    frag_color.x -= uptake;
     
     // world coord & cursor calculation
     vec2 xy = (2. * gl_FragCoord.xy / tex_res - 1.) * 100.;
@@ -72,27 +71,27 @@ void main(){
     float len = length((xyz.xy + 1.) * resolution / 2. - mouse);
     float x = len / cursor;
     if (len < cursor && buttons == 1){
-        gl_FragColor.x += cursor_elev_level * (1. -  x * x * (3. - 2. * x));
+        frag_color.x += cursor_elev_level * (1. -  x * x * (3. - 2. * x));
     }
     if (len < cursor && buttons == 2){
-        // gl_FragColor.y += cursor_water_level * (1. -  x * x * (3. - 2. * x));
-        gl_FragColor.z += cursor_water_level * (1. -  x * x * (3. - 2. * x));
-        // gl_FragColor.z = 1.;
+        // frag_color.y += cursor_water_level * (1. -  x * x * (3. - 2. * x));
+        frag_color.z += cursor_water_level * (1. -  x * x * (3. - 2. * x));
+        // frag_color.z = 1.;
     }
-    if (gl_FragColor.x + gl_FragColor.y <= 0.5){
-        gl_FragColor.y = 0.5 - gl_FragColor.x;
+    if (frag_color.x + frag_color.y <= 0.5){
+        frag_color.y = 0.5 - frag_color.x;
     }
-    if (gl_FragColor.x > 0.5){
-        gl_FragColor.y += rain;
+    if (frag_color.x > 0.5){
+        frag_color.y += rain;
     }
-    gl_FragColor.a = 0.;
+    frag_color.a = 0.;
     
 }
 `;
 
 let camera_vertex_shader_src = `
-attribute vec2 vert_pos;
-varying vec2 uv;
+in vec2 vert_pos;
+out vec2 uv;
 
 void main(){
 
@@ -101,60 +100,60 @@ void main(){
 
     vec4 world_coords = M_camera * vec4(vert_pos, 0., 1.);
     uv = (world_coords.xy / 100. + 1.) / 2.;
-    float elevation = sample(background_layer, uv).x * 1.;
+    float elevation = sample_tex(background_layer, uv).x * 1.;
     world_coords.z = elevation;
     gl_Position = M_proj * world_coords;
 }
 `;
 
 let camera_fragment_shader_src = `
-varying vec2 uv;
+in vec2 uv;
 
 void main(){
     float fog_amount = pow(gl_FragCoord.z, fog_gamma);
     vec3 normal = normalize(vec3(
-        sample(background_layer, uv + vec2(1., 0.) / tex_res).x - sample(background_layer, uv - vec2(1., 0.) / tex_res).x,
-        sample(background_layer, uv + vec2(0., 1.) / tex_res).x - sample(background_layer, uv - vec2(0., 1.) / tex_res).x,
+        sample_tex(background_layer, uv + vec2(1., 0.) / tex_res).x - sample_tex(background_layer, uv - vec2(1., 0.) / tex_res).x,
+        sample_tex(background_layer, uv + vec2(0., 1.) / tex_res).x - sample_tex(background_layer, uv - vec2(0., 1.) / tex_res).x,
         200. / 512.
     ));
     float val = max(dot(normal, sun_direction), 0.);
-    gl_FragColor = sun_color * terrain_color;
-    gl_FragColor.rgb *= clamp(val, 0.1, 1.0);
-    gl_FragColor *= 1. - fog_amount;
-    gl_FragColor += fog_amount * fog_color;
-    gl_FragColor.a = 1.;
+    frag_color = sun_color * terrain_color;
+    frag_color.rgb *= clamp(val, 0.1, 1.0);
+    frag_color *= 1. - fog_amount;
+    frag_color += fog_amount * fog_color;
+    frag_color.a = 1.;
 
-    // gl_FragColor = vec4(1., 0., 0., 1.);
+    // frag_color = vec4(1., 0., 0., 1.);
 }
 
 `;
 
 let water_vertex_shader_src = `
-attribute vec2 vert_pos;
-varying vec2 uv;
-varying vec3 xyz;
+in vec2 vert_pos;
+out vec2 uv;
+out vec3 xyz;
 
 void main(){
     vec4 world_coords = M_camera * vec4(vert_pos, 0., 1.);
     uv = (world_coords.xy / 100. + 1.) / 2.;
     xyz = world_coords.xyz;
-    float elevation = dot(sample(background_layer, uv).xy, vec2(1.));
+    float elevation = dot(sample_tex(background_layer, uv).xy, vec2(1.));
     world_coords.z = elevation;
     gl_Position = M_proj * world_coords;
 }
 `;
 
 let water_fragment_shader_src = `
-varying vec2 uv;
-varying vec3 xyz;
+in vec2 uv;
+in vec3 xyz;
 
 void main(){
     // [x: elevation, y: water level, z: sediment, w: none]
-    vec4 b = sample(background_layer, uv);
-    vec4 b_n = sample(background_layer, uv + vec2(0., 1.) / tex_res);
-    vec4 b_s = sample(background_layer, uv + vec2(0., -1.) / tex_res);
-    vec4 b_e = sample(background_layer, uv + vec2(1., 0.) / tex_res);
-    vec4 b_w = sample(background_layer, uv + vec2(-1., 0.) / tex_res);
+    vec4 b = sample_tex(background_layer, uv);
+    vec4 b_n = sample_tex(background_layer, uv + vec2(0., 1.) / tex_res);
+    vec4 b_s = sample_tex(background_layer, uv + vec2(0., -1.) / tex_res);
+    vec4 b_e = sample_tex(background_layer, uv + vec2(1., 0.) / tex_res);
+    vec4 b_w = sample_tex(background_layer, uv + vec2(-1., 0.) / tex_res);
 
     // water flow
     vec4 flux = vec4(  // [n, s, e, w]
@@ -163,7 +162,7 @@ void main(){
         clamp(b_e.x + b_e.y - b.x - b.y, -b.y / 4., b_e.y / 4.),
         clamp(b_w.x + b_w.y - b.x - b.y, -b.y / 4., b_w.y / 4.)
     ) * flow_rate;
-    gl_FragColor.y += dot(flux, vec4(1.));
+    frag_color.y += dot(flux, vec4(1.));
 
     // water velocity
     vec2 vel = vec2(
@@ -173,7 +172,7 @@ void main(){
 
     float vel_mag = clamp(length(vel), 0., 1.);
     float saturation = b.z / (vel_mag * b.y * K_sat);
-    gl_FragColor = vec4(
+    frag_color = vec4(
         0.,
         // vel_mag * 100., 
         b.z * 100., 
@@ -192,19 +191,19 @@ void main(){
     ));
     // float reflection_amount = 1. - dot(normalize(camera_position - xyz), normal);
     float reflection_amount = 0.0;
-    gl_FragColor = reflection_amount * fog_color + (1. - reflection_amount) * water_color;
+    frag_color = reflection_amount * fog_color + (1. - reflection_amount) * water_color;
     float water_amount = b.g;
-    // gl_FragColor = vec4(0., 0., b.z * .1, 1.);
-    gl_FragColor.a = min(0.5, water_amount * 1.);
+    // frag_color = vec4(0., 0., b.z * .1, 1.);
+    frag_color.a = min(0.5, water_amount * 1.);
 
-    // gl_FragColor = vec4(0., 1., 0., 1.);
+    // frag_color = vec4(0., 1., 0., 1.);
 }
 
 `;
 
 let test_fragment_shader_src = `
 void main(){
-    gl_FragColor = vec4(1., 0., 0., 0.1);
+    frag_color = vec4(1., 0., 0., 0.1);
 }
 
 `;
