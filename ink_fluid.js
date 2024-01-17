@@ -1,8 +1,8 @@
 // python -m http.server 8888
 
 let screen_vs_src = `
-attribute vec2 vert_pos;
-varying vec2 xy;
+in vec2 vert_pos;
+out vec2 xy;
 
 void main(){
     gl_Position = vec4(vert_pos, 0., 1.);
@@ -18,24 +18,24 @@ void main(){
     vec2 loc = gl_FragCoord.xy / tex_res;
 
     // reverse convection
-    U = texture2D(feedback_layer, loc);
-    Un = texture2D(feedback_layer, loc + vec2(0., 1.) / tex_res);
-    Us = texture2D(feedback_layer, loc + vec2(0., -1.) / tex_res);
-    Ue = texture2D(feedback_layer, loc + vec2(1., 0.) / tex_res);
-    Uw = texture2D(feedback_layer, loc + vec2(-1., 0.) / tex_res);
+    U = texture(feedback_layer, loc);
+    Un = texture(feedback_layer, loc + vec2(0., 1.) / tex_res);
+    Us = texture(feedback_layer, loc + vec2(0., -1.) / tex_res);
+    Ue = texture(feedback_layer, loc + vec2(1., 0.) / tex_res);
+    Uw = texture(feedback_layer, loc + vec2(-1., 0.) / tex_res);
     U = (U + Un + Us + Ue + Uw) / 5.;
     loc -= dt * U.xy / tex_res;
 
     // sample neighbors
-    U = texture2D(feedback_layer, loc);
-    Un = texture2D(feedback_layer, loc + vec2(0., 1.) / tex_res);
-    Us = texture2D(feedback_layer, loc + vec2(0., -1.) / tex_res);
-    Ue = texture2D(feedback_layer, loc + vec2(1., 0.) / tex_res);
-    Uw = texture2D(feedback_layer, loc + vec2(-1., 0.) / tex_res);
-    Unw = texture2D(feedback_layer, loc + vec2(-1., 1.) / tex_res);
-    Usw = texture2D(feedback_layer, loc + vec2(-1., -1.) / tex_res);
-    Une = texture2D(feedback_layer, loc + vec2(1., 1.) / tex_res);
-    Use = texture2D(feedback_layer, loc + vec2(1., -1.) / tex_res);
+    U = texture(feedback_layer, loc);
+    Un = texture(feedback_layer, loc + vec2(0., 1.) / tex_res);
+    Us = texture(feedback_layer, loc + vec2(0., -1.) / tex_res);
+    Ue = texture(feedback_layer, loc + vec2(1., 0.) / tex_res);
+    Uw = texture(feedback_layer, loc + vec2(-1., 0.) / tex_res);
+    Unw = texture(feedback_layer, loc + vec2(-1., 1.) / tex_res);
+    Usw = texture(feedback_layer, loc + vec2(-1., -1.) / tex_res);
+    Une = texture(feedback_layer, loc + vec2(1., 1.) / tex_res);
+    Use = texture(feedback_layer, loc + vec2(1., -1.) / tex_res);
 
     // smooth pressure
     U.z = 0.25 * Uw.z + 0.25 * Un.z + 0.25 * Us.z + 0.25 * Ue.z;
@@ -49,11 +49,11 @@ void main(){
     // add pressure gradient
     U.xy += 1.0 * vec2(Uw.z - Ue.z, Us.z - Un.z);
     
-    gl_FragColor = U;
+    frag_color = U;
 
     // pen
     if ((length(mouse - gl_FragCoord.xy) < pen_size) && (buttons != 0)){
-        gl_FragColor = vec4(0., 0.0, U.z, 1.);
+        frag_color = vec4(0., 0.0, U.z, 1.);
     }
 }
 `;
@@ -65,19 +65,19 @@ void main(){
     vec2 loc = gl_FragCoord.xy / tex_res;
 
     // reverse convection
-    U = texture2D(feedback_layer, loc);
-    Un = texture2D(feedback_layer, loc + vec2(0., 1.) / tex_res);
-    Us = texture2D(feedback_layer, loc + vec2(0., -1.) / tex_res);
-    Ue = texture2D(feedback_layer, loc + vec2(1., 0.) / tex_res);
-    Uw = texture2D(feedback_layer, loc + vec2(-1., 0.) / tex_res);
+    U = texture(feedback_layer, loc);
+    Un = texture(feedback_layer, loc + vec2(0., 1.) / tex_res);
+    Us = texture(feedback_layer, loc + vec2(0., -1.) / tex_res);
+    Ue = texture(feedback_layer, loc + vec2(1., 0.) / tex_res);
+    Uw = texture(feedback_layer, loc + vec2(-1., 0.) / tex_res);
     U = (U + Un + Us + Ue + Uw) / 5.;
     loc -= dt * U.xy / tex_res;
     
-    gl_FragColor = texture2D(color_layer, loc);
+    frag_color = texture(color_layer, loc);
     
     // pen
     if ((length(mouse - gl_FragCoord.xy) < pen_size) && (buttons != 0)){
-        gl_FragColor = pen_color;
+        frag_color = pen_color;
     }
 }
 `;
@@ -85,9 +85,9 @@ void main(){
 let display_fs_src = `
 void main(){
     vec2 loc = gl_FragCoord.xy / tex_res;
-    gl_FragColor = texture2D(color_layer, loc);
-    // gl_FragColor = texture2D(feedback_layer, loc);
-    // gl_FragColor.a = 1.;
+    frag_color = texture(color_layer, loc);
+    // frag_color = texture(feedback_layer, loc);
+    // frag_color.a = 1.;
 }
 `;
 
@@ -107,8 +107,12 @@ function mouse_move(event){
 
 function init(){
 
+    // TODO: check for changes in gl_layers.js that broke
+
     let canvas = document.getElementById('gl-canvas');
     setup_gl(canvas);
+    width = canvas.width;
+    height = canvas.height;
 
     rect_verts = [
         [-1, -1],
