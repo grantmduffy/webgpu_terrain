@@ -4,11 +4,11 @@ precision highp int;
 precision highp sampler2D;
 
 in vec2 vert_pos;
-out vec2 uv;
+out vec2 xy;
 
 void main(){
     gl_Position = vec4(vert_pos, 0., 1.);
-    uv = vert_pos * 0.5 + 0.5;
+    xy = vert_pos * 0.5 + 0.5;
 }
 
 `;
@@ -17,6 +17,9 @@ let sim_fs_src = `#version 300 es
 precision highp float;
 precision highp int;
 precision highp sampler2D;
+
+#define K_pressure 0.01
+#define K_p_decay 0.99
 
 uniform vec2 mouse_pos;
 uniform int mouse_btns;
@@ -28,7 +31,7 @@ uniform sampler2D high0;
 uniform sampler2D high1;
 uniform sampler2D other0;
 
-in vec2 uv;
+in vec2 xy;
 layout(location = 0) out vec4 low0_out;
 layout(location = 1) out vec4 low1_out;
 layout(location = 2) out vec4 high0_out;
@@ -37,19 +40,44 @@ layout(location = 4) out vec4 other0_out;
 
 
 void main(){
-    vec4 low0_n = texture(low0, uv + vec2(0., 1.) / res);
-    vec4 low0_s = texture(low0, uv + vec2(0., -1.) / res);
-    vec4 low0_e = texture(low0, uv + vec2(1., 0.) / res);
-    vec4 low0_w = texture(low0, uv + vec2(-1., 0.) / res);
+
+    // backward convection
+    vec2 uv_low = texture(low0, xy).xy;
+    vec4 low0_n = texture(low0, xy + (vec2(0., 1.)- uv_low) / res);
+    vec4 low0_s = texture(low0, xy + (vec2(0., -1.)- uv_low) / res);
+    vec4 low0_e = texture(low0, xy + (vec2(1., 0.)- uv_low) / res);
+    vec4 low0_w = texture(low0, xy + (vec2(-1., 0.)- uv_low) / res);
+    vec2 uv_high = texture(high0, xy).xy;
+    vec4 high0_n = texture(high0, xy + (vec2(0., 1.)- uv_high) / res);
+    vec4 high0_s = texture(high0, xy + (vec2(0., -1.)- uv_high) / res);
+    vec4 high0_e = texture(high0, xy + (vec2(1., 0.)- uv_high) / res);
+    vec4 high0_w = texture(high0, xy + (vec2(-1., 0.)- uv_high) / res);
+    low0_out = texture(low0, xy - uv_low / res);
+    low1_out = texture(low1, xy - uv_low / res);
+    high0_out = texture(high0, xy - uv_low / res);
+    high1_out = texture(high1, xy - uv_low / res);
+
+    // accumulate pressure
+    low0_out.p += low0_w.x - low0_e.x + low0_s.y - low0_n.y;
+    low0_out.p *= K_p_decay;
+    high0_out.p += high0_w.x - high0_e.x + high0_s.y - high0_n.y;
+    high0_out.p *= K_p_decay;
+
+    // decend pressure
+    low0_out.x += (low0_w.p - low0_e.p) * K_pressure;
+    low0_out.y += (low0_s.p - low0_n.p) * K_pressure;
+    high0_out.x += (high0_w.p - high0_e.p) * K_pressure;
+    high0_out.y += (high0_s.p - high0_n.p) * K_pressure;
     
-    low0_out = (texture(low0, uv) + low0_n + low0_s + low0_e + low0_w) / 5.;
-    low1_out = vec4(0., uv, 1.);
-    high0_out = vec4(uv, 1., 1.);
-    high1_out = vec4(uv, 0., 1.);
+    
+    // handle elevation, water, and erosion
     other0_out = vec4(0.5, 1., 0., 1.);
 
-    if ((length(mouse_pos - uv) < 0.01) && (mouse_btns == 1)){
+    if ((length(mouse_pos - xy) < 0.01) && (mouse_btns == 1)){
         low0_out = vec4(1.);
+        high0_out = vec4(1.);
+        low1_out = vec4(0., 0., 0., 1.);
+        high1_out = vec4(0., 0., 0., 1.);
     }
 }
 
@@ -61,11 +89,11 @@ precision highp int;
 precision highp sampler2D;
 
 in vec2 vert_pos;
-out vec2 uv;
+out vec2 xy;
 
 void main(){
     gl_Position = vec4(vert_pos, 0., 1.);
-    uv = vert_pos * 0.5 + 0.5;
+    xy = vert_pos * 0.5 + 0.5;
 }
 
 `;
@@ -75,7 +103,7 @@ precision highp float;
 precision highp int;
 precision highp sampler2D;
 
-in vec2 uv;
+in vec2 xy;
 out vec4 frag_color;
 uniform sampler2D low0;
 uniform sampler2D low1;
@@ -85,7 +113,10 @@ uniform sampler2D other0;
 
 
 void main(){
-    frag_color = texture(low0, uv);
+    vec4 low0_val = texture(low0, xy);
+    float vel = length(low0_val.xy);
+    float p = low0_val.p;
+    frag_color = vec4(p, vec2(vel), 1.);
 }
 
 `;
@@ -150,8 +181,8 @@ function init(){
     for (var i = 0; i < tex_names.length; i++){
         textures.push({
             'name': tex_names[i],
-            'in_tex': create_texture(width, height, [0, 1, 0, 1], i),
-            'out_tex': create_texture(width, height, [0, 0, 1, 1], i)
+            'in_tex': create_texture(width, height, [0, 0, 0, 1], i),
+            'out_tex': create_texture(width, height, [0, 0, 0, 1], i)
         });
     }
 
@@ -212,7 +243,8 @@ function init(){
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
         gl.drawElements(gl.TRIANGLES, 3 * screen_mesh[1].length, gl.UNSIGNED_SHORT, 0);
 
-        setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
+        // setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
+        requestAnimationFrame(loop);  // unlimited fps
     }
     requestAnimationFrame(loop);
 }
