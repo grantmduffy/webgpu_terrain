@@ -20,24 +20,36 @@ precision highp sampler2D;
 
 uniform vec2 mouse_pos;
 uniform int mouse_btns;
+uniform vec2 res;
+
+uniform sampler2D low0;
+uniform sampler2D low1;
+uniform sampler2D high0;
+uniform sampler2D high1;
+uniform sampler2D other0;
 
 in vec2 uv;
-layout(location = 0) out vec4 low0;
-layout(location = 1) out vec4 low1;
-layout(location = 2) out vec4 high0;
-layout(location = 3) out vec4 high1;
-layout(location = 4) out vec4 other0;
+layout(location = 0) out vec4 low0_out;
+layout(location = 1) out vec4 low1_out;
+layout(location = 2) out vec4 high0_out;
+layout(location = 3) out vec4 high1_out;
+layout(location = 4) out vec4 other0_out;
 
 
 void main(){
-    low0 = vec4(1., uv, 1.);
-    low1 = vec4(0., uv, 1.);
-    high0 = vec4(uv, 1., 1.);
-    high1 = vec4(uv, 0., 1.);
-    other0 = vec4(0.5, 1., 0., 1.);
+    vec4 low0_n = texture(low0, uv + vec2(0., 1.) / res);
+    vec4 low0_s = texture(low0, uv + vec2(0., -1.) / res);
+    vec4 low0_e = texture(low0, uv + vec2(1., 0.) / res);
+    vec4 low0_w = texture(low0, uv + vec2(-1., 0.) / res);
+    
+    low0_out = (texture(low0, uv) + low0_n + low0_s + low0_e + low0_w) / 5.;
+    low1_out = vec4(0., uv, 1.);
+    high0_out = vec4(uv, 1., 1.);
+    high1_out = vec4(uv, 0., 1.);
+    other0_out = vec4(0.5, 1., 0., 1.);
 
-    if ((length(mouse_pos - uv) < 0.1) && (mouse_btns == 1)){
-        low0 = vec4(0., 0., 0., 1.);
+    if ((length(mouse_pos - uv) < 0.01) && (mouse_btns == 1)){
+        low0_out = vec4(1.);
     }
 }
 
@@ -86,13 +98,13 @@ let mouse_state = {
     buttons: 0
 };
 var canvas = null;
+const fps = 30;
 
 
 function mouse_move(event){
     mouse_state.x = event.offsetX / width;
     mouse_state.y = 1 - event.offsetY / height;
     mouse_state.buttons = event.buttons;
-    console.log(mouse_state);
 }
 
 
@@ -184,6 +196,7 @@ function init(){
         }
         gl.uniform2f(gl.getUniformLocation(sim_program, 'mouse_pos'), mouse_state.x, mouse_state.y);
         gl.uniform1i(gl.getUniformLocation(sim_program, 'mouse_btns'), mouse_state.buttons);
+        gl.uniform2f(gl.getUniformLocation(sim_program, 'res'), width, height);
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
         gl.drawElements(gl.TRIANGLES, 3 * screen_mesh[1].length, gl.UNSIGNED_SHORT, 0);
@@ -193,12 +206,13 @@ function init(){
         for (var i = 0; i < textures.length; i++){
             gl.uniform1i(gl.getUniformLocation(render_program, textures[i].name), i);
         }
+        gl.uniform2f(gl.getUniformLocation(render_program, 'res'), width, height);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
         gl.drawElements(gl.TRIANGLES, 3 * screen_mesh[1].length, gl.UNSIGNED_SHORT, 0);
 
-        console.log('draw');
+        setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
     }
-    setInterval(loop, 1000);
+    requestAnimationFrame(loop);
 }
