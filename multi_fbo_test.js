@@ -18,6 +18,9 @@ precision highp float;
 precision highp int;
 precision highp sampler2D;
 
+uniform vec2 mouse_pos;
+uniform int mouse_btns;
+
 in vec2 uv;
 layout(location = 0) out vec4 low0;
 layout(location = 1) out vec4 low1;
@@ -32,6 +35,10 @@ void main(){
     high0 = vec4(uv, 1., 1.);
     high1 = vec4(uv, 0., 1.);
     other0 = vec4(0.5, 1., 0., 1.);
+
+    if ((length(mouse_pos - uv) < 0.1) && (mouse_btns == 1)){
+        low0 = vec4(0., 0., 0., 1.);
+    }
 }
 
 `;
@@ -72,15 +79,27 @@ void main(){
 `;
 
 
-function mouse_move(event){
+var [width, height] = [1, 1];
+let mouse_state = {
+    x: 0.5,
+    y: 0.5,
+    buttons: 0
+};
+var canvas = null;
 
+
+function mouse_move(event){
+    mouse_state.x = event.offsetX / width;
+    mouse_state.y = 1 - event.offsetY / height;
+    mouse_state.buttons = event.buttons;
+    console.log(mouse_state);
 }
 
 
 function init(){
-    let canvas = document.getElementById('gl-canvas')
-    let [width, height] = [canvas.width, canvas.height];
+    canvas = document.getElementById('gl-canvas')
     setup_gl(canvas);
+    [width, height] = [canvas.width, canvas.height];
     
     // compile shaders
     let sim_vs = compile_shader(sim_vs_src, gl.VERTEX_SHADER, '');
@@ -163,6 +182,8 @@ function init(){
             );
 
         }
+        gl.uniform2f(gl.getUniformLocation(sim_program, 'mouse_pos'), mouse_state.x, mouse_state.y);
+        gl.uniform1i(gl.getUniformLocation(sim_program, 'mouse_btns'), mouse_state.buttons);
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
         gl.drawElements(gl.TRIANGLES, 3 * screen_mesh[1].length, gl.UNSIGNED_SHORT, 0);
