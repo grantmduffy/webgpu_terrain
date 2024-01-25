@@ -138,34 +138,46 @@ function init(){
         // gl.COLOR_ATTACHMENT6,
         // gl.COLOR_ATTACHMENT7,
     ]);
-    
-    for (var i = 0; i < textures.length; i++){
-        gl.activeTexture(gl.TEXTURE0 + i);
-        gl.bindTexture(gl.TEXTURE_2D, textures[i].in_tex);
-        gl.framebufferTexture2D(
-            gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i,
-            gl.TEXTURE_2D, textures[i].out_tex, 0
-        );
-    }
-    
-    // draw sim
-    gl.useProgram(sim_program);
-    for (var i = 0; i < textures.length; i++){
-        gl.uniform1i(gl.getUniformLocation(sim_program, textures[i].name), i);
-    }
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
-    gl.drawElements(gl.TRIANGLES, 3 * screen_mesh[1].length, gl.UNSIGNED_SHORT, 0);
 
-    // draw render
-    gl.useProgram(render_program);
-    for (var i = 0; i < textures.length; i++){
-        gl.uniform1i(gl.getUniformLocation(render_program, textures[i].name), i);
+    let loop = function(){
+
+        // sim program
+        gl.useProgram(sim_program);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, sim_fbo);
+        for (var i = 0; i < textures.length; i++){
+
+            // swap textures
+            [textures[i].in_tex, textures[i].out_tex] = [textures[i].out_tex, textures[i].in_tex];
+
+            // set active in textures (for all programs)
+            gl.activeTexture(gl.TEXTURE0 + i);
+            gl.bindTexture(gl.TEXTURE_2D, textures[i].in_tex);
+
+            // set in texture uniforms for sim_program
+            gl.uniform1i(gl.getUniformLocation(sim_program, textures[i].name), i);
+
+            // set out textures for sim_fbo
+            gl.framebufferTexture2D(
+                gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i,
+                gl.TEXTURE_2D, textures[i].out_tex, 0
+            );
+
+        }
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
+        gl.drawElements(gl.TRIANGLES, 3 * screen_mesh[1].length, gl.UNSIGNED_SHORT, 0);
+
+        // draw render
+        gl.useProgram(render_program);
+        for (var i = 0; i < textures.length; i++){
+            gl.uniform1i(gl.getUniformLocation(render_program, textures[i].name), i);
+        }
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
+        gl.drawElements(gl.TRIANGLES, 3 * screen_mesh[1].length, gl.UNSIGNED_SHORT, 0);
+
+        console.log('draw');
     }
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
-    gl.drawElements(gl.TRIANGLES, 3 * screen_mesh[1].length, gl.UNSIGNED_SHORT, 0);
-
-
+    setInterval(loop, 1000);
 }
