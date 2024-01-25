@@ -29,7 +29,9 @@ layout(location = 4) out vec4 other0;
 void main(){
     low0 = vec4(1., uv, 1.);
     low1 = vec4(0., uv, 1.);
-    low2 = vec4(uv, 1., 1.);
+    high0 = vec4(uv, 1., 1.);
+    high1 = vec4(uv, 0., 1.);
+    other0 = vec4(0.5, 1., 0., 1.);
 }
 
 `;
@@ -112,51 +114,54 @@ function init(){
     // textures
     let sim_fbo = gl.createFramebuffer();
     let sim_depthbuffer = gl.createRenderbuffer();
-    let sim_0 = create_texture(width, height, [0, 1, 0, 1], 0);
-    let sim_1 = create_texture(width, height, [0, 0, 1, 1], 1);
-    let sim_2 = create_texture(width, height, [1, 0, 0, 1], 2);
+    let tex_names = ['low0', 'low1', 'high0', 'high1', 'other0'];
+    let textures = [];
+    for (var i = 0; i < tex_names.length; i++){
+        textures.push({
+            'name': tex_names[i],
+            'in_tex': create_texture(width, height, [0, 1, 0, 1], i),
+            'out_tex': create_texture(width, height, [0, 0, 1, 1], i)
+        });
+    }
 
-    // fbo
+    // setup fbo
     gl.bindRenderbuffer(gl.RENDERBUFFER, sim_depthbuffer);
     gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height);
     gl.bindFramebuffer(gl.FRAMEBUFFER, sim_fbo);
-    gl.framebufferTexture2D(
-        gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
-        gl.TEXTURE_2D, sim_0, 0
-    );
-    gl.framebufferTexture2D(
-        gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1,
-        gl.TEXTURE_2D, sim_1, 0
-    );
-    gl.framebufferTexture2D(
-        gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT2,
-        gl.TEXTURE_2D, sim_2, 0
-    );
-    
-    // draw sim
-    gl.useProgram(sim_program);
     gl.drawBuffers([
         gl.COLOR_ATTACHMENT0,
         gl.COLOR_ATTACHMENT1,
         gl.COLOR_ATTACHMENT2,
-        // gl.COLOR_ATTACHMENT3,
-        // gl.COLOR_ATTACHMENT4,
+        gl.COLOR_ATTACHMENT3,
+        gl.COLOR_ATTACHMENT4,
         // gl.COLOR_ATTACHMENT5,
         // gl.COLOR_ATTACHMENT6,
         // gl.COLOR_ATTACHMENT7,
     ]);
+    
+    for (var i = 0; i < textures.length; i++){
+        gl.activeTexture(gl.TEXTURE0 + i);
+        gl.bindTexture(gl.TEXTURE_2D, textures[i].in_tex);
+        gl.framebufferTexture2D(
+            gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i,
+            gl.TEXTURE_2D, textures[i].out_tex, 0
+        );
+    }
+    
+    // draw sim
+    gl.useProgram(sim_program);
+    for (var i = 0; i < textures.length; i++){
+        gl.uniform1i(gl.getUniformLocation(sim_program, textures[i].name), i);
+    }
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
     gl.drawElements(gl.TRIANGLES, 3 * screen_mesh[1].length, gl.UNSIGNED_SHORT, 0);
 
     // draw render
     gl.useProgram(render_program);
-    // gl.drawBuffers([
-        
-    // ])
-    gl.uniform1i(gl.getUniformLocation(render_program, 'sim_0'), 0);
-    gl.uniform1i(gl.getUniformLocation(render_program, 'sim_1'), 1);
-    gl.uniform1i(gl.getUniformLocation(render_program, 'sim_2'), 2);
+    for (var i = 0; i < textures.length; i++){
+        gl.uniform1i(gl.getUniformLocation(render_program, textures[i].name), i);
+    }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
