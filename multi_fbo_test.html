@@ -1,0 +1,51 @@
+<!doctype html>
+
+<html>
+  <head>
+
+    <!-- Google tag (gtag.js) -->
+<!-- <script async src="https://www.googletagmanager.com/gtag/js?id=G-ECTJHDMF7K"></script> -->
+<!-- <script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-ECTJHDMF7K');
+</script> -->
+<style>
+
+#inputs {
+  display: flex;
+  flex-direction: column;
+}
+
+.uniform-input {
+  display: flex;
+  flex-direction: row;
+}
+
+label, input {
+  margin: 4px;
+}
+
+</style>
+
+    <meta charset="utf-8">
+    <title>WebGL Test Page</title>
+  </head>
+  <body onload="init();">
+    <div><canvas 
+        width="512" height="512" id="gl-canvas" 
+        onmousemove="mouse_move(event);" 
+        onmousedown="mouse_move(event);"
+        onmouseup="mouse_move(event);"
+        onmouseleave="mouse_move(event);"
+        onmouseenter="mouse_move(event);"
+    ></canvas></div>
+    <a id="debug"></a>
+    <script src="gl-matrix-min.js"></script>
+    <script src="gl_layers.js"></script>
+    <script src="multi_fbo_test.js"></script>
+    <div id="inputs"></div>
+  </body>
+</html>

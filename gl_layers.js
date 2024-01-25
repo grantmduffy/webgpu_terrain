@@ -62,9 +62,9 @@ function setup_gl(canvas, cull=null, depth_test=true){
 }
 
 
-function compile_shader(source, type){
+function compile_shader(source, type, globals=global_glsl){
     let shader = gl.createShader(type);
-    gl.shaderSource(shader, global_glsl + source);
+    gl.shaderSource(shader, globals + source);
     gl.compileShader(shader);
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)){
         console.error('Failed to compile shader:', gl.getShaderInfoLog(shader));
