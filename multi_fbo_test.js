@@ -18,8 +18,9 @@ precision highp float;
 precision highp int;
 precision highp sampler2D;
 
-#define K_pressure 0.01
+#define K_pressure 0.05
 #define K_p_decay 0.99
+#define PEN_SIZE 0.05
 
 uniform vec2 mouse_pos;
 uniform int mouse_btns;
@@ -56,6 +57,10 @@ void main(){
     low1_out = texture(low1, xy - uv_low / res);
     high0_out = texture(high0, xy - uv_low / res);
     high1_out = texture(high1, xy - uv_low / res);
+    
+    // smooth pressure
+    low0_out.p = (low0_w.p + low0_e.p + low0_s.p + low0_n.p) / 4.;
+    high0_out.p = (high0_w.p + high0_e.p + high0_s.p + high0_n.p) / 4.;
 
     // accumulate pressure
     low0_out.p += low0_w.x - low0_e.x + low0_s.y - low0_n.y;
@@ -73,7 +78,7 @@ void main(){
     // handle elevation, water, and erosion
     other0_out = vec4(0.5, 1., 0., 1.);
 
-    if ((length(mouse_pos - xy) < 0.01) && (mouse_btns == 1)){
+    if ((length(mouse_pos - xy) < PEN_SIZE) && (mouse_btns == 1)){
         low0_out = vec4(1.);
         high0_out = vec4(1.);
         low1_out = vec4(0., 0., 0., 1.);
@@ -114,9 +119,11 @@ uniform sampler2D other0;
 
 void main(){
     vec4 low0_val = texture(low0, xy);
+    vec4 low1_val = texture(low1, xy);
     float vel = length(low0_val.xy);
     float p = low0_val.p;
-    frag_color = vec4(p, vec2(vel), 1.);
+    float h = low1_val.a;
+    frag_color = vec4(p, vel, h, 1.);
 }
 
 `;
@@ -181,8 +188,8 @@ function init(){
     for (var i = 0; i < tex_names.length; i++){
         textures.push({
             'name': tex_names[i],
-            'in_tex': create_texture(width, height, [0, 0, 0, 1], i),
-            'out_tex': create_texture(width, height, [0, 0, 0, 1], i)
+            'in_tex': create_texture(width, height, [0, 0, 0, 0], i),
+            'out_tex': create_texture(width, height, [0, 0, 0, 0], i)
         });
     }
 
