@@ -20,11 +20,13 @@ precision highp sampler2D;
 
 #define K_pressure 0.05
 #define K_p_decay 0.99
-#define PEN_SIZE 0.05
 
 uniform vec2 mouse_pos;
 uniform int mouse_btns;
 uniform vec2 res;
+uniform float pen_size;
+uniform float pen_strength;
+uniform int pen_type;
 
 uniform sampler2D low0;
 uniform sampler2D low1;
@@ -78,11 +80,17 @@ void main(){
     // handle elevation, water, and erosion
     other0_out = vec4(0.5, 1., 0., 1.);
 
-    if ((length(mouse_pos - xy) < PEN_SIZE) && (mouse_btns == 1)){
-        low0_out = vec4(1.);
-        high0_out = vec4(1.);
-        low1_out = vec4(0., 0., 0., 1.);
-        high1_out = vec4(0., 0., 0., 1.);
+    switch (pen_type){
+    case 0:
+        if ((length(mouse_pos - xy) < pen_size) && (mouse_btns == 1)){
+            low0_out = pen_strength * vec4(1., 1., 0., 0.);
+            high0_out = pen_strength * vec4(1., 1., 0., 0.);
+            low1_out = vec4(0., 0., 0., 1.);
+            high1_out = vec4(0., 0., 0., 1.);
+        }
+        break;
+    case 1:
+        break;
     }
 }
 
@@ -108,22 +116,28 @@ precision highp float;
 precision highp int;
 precision highp sampler2D;
 
-in vec2 xy;
-out vec4 frag_color;
+uniform int view_mode;
 uniform sampler2D low0;
 uniform sampler2D low1;
 uniform sampler2D high0;
 uniform sampler2D high1;
 uniform sampler2D other0;
 
+in vec2 xy;
+out vec4 frag_color;
+
 
 void main(){
-    vec4 low0_val = texture(low0, xy);
-    vec4 low1_val = texture(low1, xy);
-    float vel = length(low0_val.xy);
-    float p = low0_val.p;
-    float h = low1_val.a;
-    frag_color = vec4(p, vel, h, 1.);
+    switch (view_mode){
+    case 0:
+        vec4 low0_val = texture(low0, xy);
+        vec4 low1_val = texture(low1, xy);
+        float vel = length(low0_val.xy);
+        float p = low0_val.p;
+        float h = low1_val.a;
+        frag_color = vec4(p, vel, h, 1.);        
+        break;
+    }
 }
 
 `;
@@ -150,6 +164,16 @@ function init(){
     canvas = document.getElementById('gl-canvas')
     setup_gl(canvas);
     [width, height] = [canvas.width, canvas.height];
+    let pen_type_options = [];
+    let pen_type_el = document.getElementById('pen-type');
+    for (var i = 0; i < pen_type_el.children.length; i++){
+        pen_type_options.push(pen_type_el.children[i].value);
+    }
+    let view_mode_options = [];
+    let view_mode_el = document.getElementById('view-mode');
+    for (var i = 0; i < view_mode_el.children.length; i++){
+        view_mode_options.push(view_mode_el.children[i].value);
+    }
     
     // compile shaders
     let sim_vs = compile_shader(sim_vs_src, gl.VERTEX_SHADER, '');
@@ -188,8 +212,8 @@ function init(){
     for (var i = 0; i < tex_names.length; i++){
         textures.push({
             'name': tex_names[i],
-            'in_tex': create_texture(width, height, [0, 0, 0, 0], i),
-            'out_tex': create_texture(width, height, [0, 0, 0, 0], i)
+            'in_tex': create_texture(width, height, [0, 0, 0, 0], i, 'repeat'),
+            'out_tex': create_texture(width, height, [0, 0, 0, 0], i, 'repeat')
         });
     }
 
@@ -232,9 +256,16 @@ function init(){
             );
 
         }
+        
+        // set uniforms
         gl.uniform2f(gl.getUniformLocation(sim_program, 'mouse_pos'), mouse_state.x, mouse_state.y);
         gl.uniform1i(gl.getUniformLocation(sim_program, 'mouse_btns'), mouse_state.buttons);
         gl.uniform2f(gl.getUniformLocation(sim_program, 'res'), width, height);
+        gl.uniform1i(gl.getUniformLocation(sim_program, 'pen_type'), pen_type_options.indexOf(pen_type_el.value));
+        gl.uniform1f(gl.getUniformLocation(sim_program, 'pen_size'), document.getElementById('pen-size').value);
+        gl.uniform1f(gl.getUniformLocation(sim_program, 'pen_strength'), document.getElementById('pen-strength').value);
+        
+        // draw
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
         gl.drawElements(gl.TRIANGLES, 3 * screen_mesh[1].length, gl.UNSIGNED_SHORT, 0);
@@ -245,6 +276,7 @@ function init(){
             gl.uniform1i(gl.getUniformLocation(render_program, textures[i].name), i);
         }
         gl.uniform2f(gl.getUniformLocation(render_program, 'res'), width, height);
+        gl.uniform1i(gl.getUniformLocation(render_program, 'view_mode'), view_mode_options.indexOf(view_mode_el.value));
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
