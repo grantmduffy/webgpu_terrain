@@ -27,6 +27,7 @@ uniform vec2 res;
 uniform float pen_size;
 uniform float pen_strength;
 uniform int pen_type;
+uniform vec2 pen_vel;
 
 uniform sampler2D low0;
 uniform sampler2D low1;
@@ -80,16 +81,31 @@ void main(){
     // handle elevation, water, and erosion
     other0_out = vec4(0.5, 1., 0., 1.);
 
+    vec2 pen_vect = pen_vel * pen_strength;
     switch (pen_type){
-    case 0:
+    case 0:  // all velocity
         if ((length(mouse_pos - xy) < pen_size) && (mouse_btns == 1)){
-            low0_out = pen_strength * vec4(1., 1., 0., 0.);
-            high0_out = pen_strength * vec4(1., 1., 0., 0.);
+            low0_out = vec4(pen_vect, 0., 0.);
+            high0_out = vec4(pen_vect, 0., 0.);
             low1_out = vec4(0., 0., 0., 1.);
             high1_out = vec4(0., 0., 0., 1.);
         }
         break;
-    case 1:
+    case 1:  // low velocity
+        if ((length(mouse_pos - xy) < pen_size) && (mouse_btns == 1)){
+            low0_out = vec4(pen_vect, 0., 0.);
+            low1_out = vec4(0., 0., 0., 1.);
+        }
+        break;
+    case 2:  // high velocity
+        if ((length(mouse_pos - xy) < pen_size) && (mouse_btns == 1)){
+            high0_out = vec4(pen_vect, 0., 0.);
+            high1_out = vec4(0., 0., 0., 1.);
+        }
+        break;
+    case 3:  // elevation
+        break;
+    case 4:  // rain
         break;
     }
 }
@@ -147,15 +163,22 @@ var [width, height] = [1, 1];
 let mouse_state = {
     x: 0.5,
     y: 0.5,
+    vel_x: 0.0,
+    vel_y: 0.0,
     buttons: 0
 };
 var canvas = null;
 const fps = 30;
+const K_drag = 100;
 
 
 function mouse_move(event){
-    mouse_state.x = event.offsetX / width;
-    mouse_state.y = 1 - event.offsetY / height;
+    let new_x = event.offsetX / width;
+    let new_y = 1 - event.offsetY / height;
+    mouse_state.vel_x = (new_x - mouse_state.x) * K_drag;
+    mouse_state.vel_y = (new_y - mouse_state.y) * K_drag;
+    mouse_state.x = new_x;
+    mouse_state.y = new_y;
     mouse_state.buttons = event.buttons;
 }
 
@@ -264,6 +287,7 @@ function init(){
         gl.uniform1i(gl.getUniformLocation(sim_program, 'pen_type'), pen_type_options.indexOf(pen_type_el.value));
         gl.uniform1f(gl.getUniformLocation(sim_program, 'pen_size'), document.getElementById('pen-size').value);
         gl.uniform1f(gl.getUniformLocation(sim_program, 'pen_strength'), document.getElementById('pen-strength').value);
+        gl.uniform2f(gl.getUniformLocation(sim_program, 'pen_vel'), mouse_state.vel_x, mouse_state.vel_y);
         
         // draw
         gl.clearColor(0, 0, 0, 0);
