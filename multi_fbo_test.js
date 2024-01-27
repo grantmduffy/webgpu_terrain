@@ -116,27 +116,23 @@ void main(){
     other_out = vec4(0.5, 1., 0., 1.);
 
     vec2 pen_vect = pen_vel * pen_strength;
-    switch (pen_type){
-    case 0:  // all velocity
-        if ((length(mouse_pos - xy) < pen_size) && (mouse_btns == 1)){
+    if ((length(mouse_pos - xy) < pen_size) && (mouse_btns == 1)){
+        switch (pen_type){
+        case 0:  // all velocity
             low_out = vec4(pen_vect, 0., 1.);
             high_out = vec4(pen_vect, 0., 1.);
-        }
-        break;
-    case 1:  // low velocity
-        if ((length(mouse_pos - xy) < pen_size) && (mouse_btns == 1)){
+            break;
+        case 1:  // low velocity
             low_out = vec4(pen_vect, 0., 1.);
-        }
-        break;
-    case 2:  // high velocity
-        if ((length(mouse_pos - xy) < pen_size) && (mouse_btns == 1)){
+            break;
+        case 2:  // high velocity
             high_out = vec4(pen_vect, 0., 1.);
+            break;
+        case 3:  // elevation
+            break;
+        case 4:  // rain
+            break;
         }
-        break;
-    case 3:  // elevation
-        break;
-    case 4:  // rain
-        break;
     }
 }
 
@@ -167,6 +163,9 @@ uniform sampler2D low_t;
 uniform sampler2D high_t;
 uniform sampler2D mid_t;
 uniform sampler2D other_t;
+uniform float pen_size;
+uniform vec2 mouse_pos;
+uniform int mouse_btns;
 
 in vec2 xy;
 out vec4 frag_color;
@@ -210,6 +209,9 @@ void main(){
         pressure = mid.p;
         frag_color = vec4(uplift, pressure, -uplift, 1.);
         break;
+    }
+    if (abs(length(mouse_pos - xy) - pen_size) < 0.001){
+        frag_color = vec4(1.);
     }
 }
 
@@ -358,6 +360,9 @@ function init(){
         }
         gl.uniform2f(gl.getUniformLocation(render_program, 'res'), width, height);
         gl.uniform1i(gl.getUniformLocation(render_program, 'view_mode'), view_mode_options.indexOf(view_mode_el.value));
+        gl.uniform1f(gl.getUniformLocation(render_program, 'pen_size'), document.getElementById('pen-size').value);
+        gl.uniform2f(gl.getUniformLocation(render_program, 'mouse_pos'), mouse_state.x, mouse_state.y);
+        gl.uniform1i(gl.getUniformLocation(render_program, 'mouse_btns'), mouse_state.buttons);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
