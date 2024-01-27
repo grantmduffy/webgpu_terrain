@@ -47,19 +47,32 @@ void main(){
 
     // backward convection
     vec2 uv_low = texture(low0, xy).xy;
+    vec2 uv_high = texture(high0, xy).xy;
+    float uplift = texture(other0, xy).t;
     vec4 low0_n = texture(low0, xy + (vec2(0., 1.)- uv_low) / res);
     vec4 low0_s = texture(low0, xy + (vec2(0., -1.)- uv_low) / res);
     vec4 low0_e = texture(low0, xy + (vec2(1., 0.)- uv_low) / res);
     vec4 low0_w = texture(low0, xy + (vec2(-1., 0.)- uv_low) / res);
-    vec2 uv_high = texture(high0, xy).xy;
     vec4 high0_n = texture(high0, xy + (vec2(0., 1.)- uv_high) / res);
     vec4 high0_s = texture(high0, xy + (vec2(0., -1.)- uv_high) / res);
     vec4 high0_e = texture(high0, xy + (vec2(1., 0.)- uv_high) / res);
     vec4 high0_w = texture(high0, xy + (vec2(-1., 0.)- uv_high) / res);
-    low0_out = texture(low0, xy - uv_low / res);
-    low1_out = texture(low1, xy - uv_low / res);
-    high0_out = texture(high0, xy - uv_low / res);
-    high1_out = texture(high1, xy - uv_low / res);
+    
+    // 2D convection
+    // low0_out = texture(low0, xy - uv_low / res);
+    // low1_out = texture(low1, xy - uv_low / res);
+    // high0_out = texture(high0, xy - uv_low / res);
+    // high1_out = texture(high1, xy - uv_low / res);
+
+    // 2.5D convection
+    low0_out  = texture(low0,  xy - uv_low  / res) * clamp(1. + uplift, 0., 1.) 
+              + texture(high0, xy - uv_low  / res) * clamp(    -uplift, 0., 1.);
+    low1_out  = texture(low1,  xy - uv_low  / res) * clamp(1. + uplift, 0., 1.) 
+              + texture(high1, xy - uv_low  / res) * clamp(    -uplift, 0., 1.);
+    high0_out = texture(high0, xy - uv_high / res) * clamp(1. - uplift, 0., 1.)
+              + texture(low0,  xy - uv_high / res) * clamp(     uplift, 0., 1.);
+    high1_out = texture(high1, xy - uv_high / res) * clamp(1. - uplift, 0., 1.)
+              + texture(low1,  xy - uv_high / res) * clamp(     uplift, 0., 1.);
     
     // smooth pressure
     low0_out.p = (low0_w.p + low0_e.p + low0_s.p + low0_n.p) / 4.;
