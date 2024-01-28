@@ -44,6 +44,7 @@ precision highp sampler2D;
 #define K_pressure 0.1
 #define K_p_decay .9
 #define K_smooth 1.0
+#define K_elevation_strength 0.01
 
 uniform vec2 mouse_pos;
 uniform int mouse_btns;
@@ -112,8 +113,8 @@ void main(){
     high_out.y += (mid_s.p - mid_n.p) * K_pressure;
     
     
-    // handle elevation, water, and erosion
-    other_out = vec4(0.5, 1., 0., 1.);
+    // TODO: handle elevation, water, and erosion
+    other_out = texture(other_t, xy);
 
     vec2 pen_vect = pen_vel * pen_strength;
     if ((length(mouse_pos - xy) < pen_size) && (mouse_btns == 1)){
@@ -129,11 +130,16 @@ void main(){
             high_out = vec4(pen_vect, 0., 1.);
             break;
         case 3:  // elevation
+            float r = length(mouse_pos - xy) / pen_size;
+            other_out.z += (2. * r * r * r - 3. * r * r + 1.) * pen_strength * K_elevation_strength;
             break;
         case 4:  // rain
             break;
         }
     }
+    
+    // clip elevation to 0-1 
+    other_out.z = clamp(other_out.z, 0., 1.);
 }
 
 `;
@@ -173,16 +179,18 @@ out vec4 frag_color;
 vec4 low;
 vec4 high;
 vec4 mid;
+vec4 other;
 float vel_low;
 float vel_high;
 float pressure;
 float h_low;
 float h_high;
 float uplift;
+float elevation;
 
 void main(){
     switch (view_mode){
-    case 0:
+    case 0:  // low velocity
         low = texture(low_t, xy);
         mid = texture(mid_t, xy);
         vel_low = length(low.xy);
@@ -190,7 +198,7 @@ void main(){
         h_low = low.a;
         frag_color = vec4(pressure, vel_low, h_low, 1.);        
         break;
-    case 1:
+    case 1:  // all velocity
         low = texture(low_t, xy);
         high = texture(high_t, xy);
         mid = texture(mid_t, xy);
@@ -199,7 +207,7 @@ void main(){
         pressure = mid.p;
         frag_color = vec4(pressure, vel_low, vel_high, 1.);
         break;
-    case 2:
+    case 2:  // uplift
         low = texture(low_t, xy);
         high = texture(high_t, xy);
         mid = texture(mid_t, xy);
@@ -208,6 +216,17 @@ void main(){
         uplift = 100. * mid.a;
         pressure = mid.p;
         frag_color = vec4(uplift, pressure, -uplift, 1.);
+        break;
+    case 3:  // elevation
+        low = texture(low_t, xy);
+        high = texture(high_t, xy);
+        mid = texture(mid_t, xy);
+        other = texture(other_t, xy);
+        vel_low = length(low.xy);
+        vel_high = length(high.xy);
+        uplift = 100. * mid.a;
+        elevation = other.z;
+        frag_color = vec4(uplift, elevation, -uplift, 1.);
         break;
     }
     if (abs(length(mouse_pos - xy) - pen_size) < 0.001){
