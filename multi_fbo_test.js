@@ -83,13 +83,23 @@ void main(){
     vec4 mid_s = texture(mid_t, xy + (vec2(0., -K_smooth) - uv_high) / res);
     vec4 mid_e = texture(mid_t, xy + (vec2(K_smooth, 0.) - uv_high) / res);
     vec4 mid_w = texture(mid_t, xy + (vec2(-K_smooth, 0.) - uv_high) / res);
+    vec4 other_n = texture(other_t, xy + (vec2(0., 1.) - uv_high) / res);
+    vec4 other_s = texture(other_t, xy + (vec2(0., -1.) - uv_high) / res);
+    vec4 other_e = texture(other_t, xy + (vec2(1., 0.) - uv_high) / res);
+    vec4 other_w = texture(other_t, xy + (vec2(-1., 0.) - uv_high) / res);
     
     // calculate divergence
     float div_low = low_n.y - low_s.y + low_e.x - low_w.x;
     float div_high = high_n.y - high_s.y + high_e.x - high_w.x;
 
+    // calculate terrain gradient
+    vec2 terrain_gradient = vec2(
+        other_e.z - other_w.z,
+        other_n.z - other_s.z
+    );
+
     // calculate uplift from divergence
-    float uplift = 0.5 * (div_high - div_low);
+    float uplift = 0.5 * (div_high - div_low) + dot(uv_low, terrain_gradient);
 
     // convection, low and high include uplift, mid is pure 2D
     low_out  = texture(low_t,  xy - uv_low  / res) * clamp(1. + uplift, 0., 1.) 
@@ -100,7 +110,7 @@ void main(){
     mid_out.a = uplift;
     
     // accumulate pressure
-    mid_out.p -= div_low + div_high;
+    mid_out.p -= div_low + div_high + dot(uv_low, terrain_gradient);
     
     // smooth pressure
     // TODO: improve filtering, maybe larger window
