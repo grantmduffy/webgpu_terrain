@@ -45,6 +45,7 @@ precision highp sampler2D;
 #define K_p_decay .9
 #define K_smooth 1.0
 #define K_elevation_strength 0.01
+#define K_updraft_pressure 1.
 
 uniform vec2 mouse_pos;
 uniform int mouse_btns;
@@ -110,11 +111,13 @@ void main(){
     mid_out.a = uplift;
     
     // accumulate pressure
-    mid_out.p -= div_low + div_high + dot(uv_low, terrain_gradient);
+    mid_out.p -= div_low + div_high - K_updraft_pressure * dot(uv_low, terrain_gradient);
     
     // smooth pressure
     // TODO: improve filtering, maybe larger window
     mid_out.p = (mid_out.p + mid_n.p + mid_s.p + mid_e.p + mid_w.p) / 5.;
+    // low_out.xy = (low_out.xy + low_n.xy + low_s.xy + low_e.xy + low_w.xy) / 5.;
+    // high_out.xy = (high_out.xy + high_n.xy + high_s.xy + high_e.xy + high_w.xy) / 5.;
 
     // decend pressure
     low_out.x += (mid_w.p - mid_e.p) * K_pressure;
@@ -319,12 +322,13 @@ function init(){
     let sim_fbo = gl.createFramebuffer();
     let sim_depthbuffer = gl.createRenderbuffer();
     let tex_names = ['low_t', 'high_t', 'mid_t', 'other_t'];
+    let tex_defaults = [[0.3, 0, 0, 0], [.3, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
     let textures = [];
     for (var i = 0; i < tex_names.length; i++){
         textures.push({
             'name': tex_names[i],
-            'in_tex': create_texture(width, height, [0, 0, 0, 0], i, 'repeat'),
-            'out_tex': create_texture(width, height, [0, 0, 0, 0], i, 'repeat')
+            'in_tex': create_texture(width, height, tex_defaults[i], i, 'clamp'),
+            'out_tex': create_texture(width, height, tex_defaults[i], i, 'clamp')
         });
     }
 
