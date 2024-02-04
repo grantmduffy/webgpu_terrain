@@ -5,16 +5,18 @@ value  | x | y | z | w |
        | r | g | b | a |
        | s | t | p | a | loc |
 -------|---|---|---|---|-----|
-low    | u | v | T | H |  0  |
-high   | u | v | T | H |  1  |
-mid    | - | - | P | U |  2  |
-other  | s | - | z | w |  3  |
+low0   | u | v | - | - |  0  |
+low1   | - | T | P | H |  1  |
+high2  | u | v | - | - |  2  |
+high3  | - | T | P | H |  3  |
+mid    | - | - | - | U |  4  |
+other  | s | - | z | w |  5  |
 
-Velocity    | uv |  low/high.xy
-Temperature | T  |  low/high.z
-Humidity    | H  |  low/high.a
-Pressure    | P  |  mid.p
-Uplift      | U  |  mid.a
+Velocity    | uv |  low0/high0.xy
+Temperature | T  |  low1/high1.t
+Humidity    | H  |  low1/high1.a
+Pressure    | P  |  low1/high1.p
+Uplift      | U  |  mid.w
 Sediment    | s  |  other.s
 Elevation   | z  |  other.z
 Water       | w  |  other.w
@@ -42,6 +44,8 @@ precision highp int;
 precision highp sampler2D;
 
 #define K_pressure 0.1
+#define K_pressure_uplift 0.01
+#define K_uplift_damping 0.05
 #define K_p_decay .9
 #define K_smooth 1.0
 #define K_elevation_strength 0.01
@@ -55,31 +59,44 @@ uniform float pen_strength;
 uniform int pen_type;
 uniform vec2 pen_vel;
 
-uniform sampler2D low_t;
-uniform sampler2D high_t;
+uniform sampler2D low0_t;
+uniform sampler2D low1_t;
+uniform sampler2D high0_t;
+uniform sampler2D high1_t;
 uniform sampler2D mid_t;
 uniform sampler2D other_t;
 
 in vec2 xy;
-layout(location = 0) out vec4 low_out;
-layout(location = 1) out vec4 high_out;
-layout(location = 2) out vec4 mid_out;
-layout(location = 3) out vec4 other_out;
+layout(location = 0) out vec4 low0_out;
+layout(location = 1) out vec4 low1_out;
+layout(location = 2) out vec4 high0_out;
+layout(location = 3) out vec4 high1_out;
+layout(location = 4) out vec4 mid_out;
+layout(location = 5) out vec4 other_out;
 
 
+// TODO: rename all variables to correct
 void main(){
 
     // backward convection
-    vec2 uv_low = texture(low_t, xy).xy;
-    vec2 uv_high = texture(high_t, xy).xy;
-    vec4 low_n = texture(low_t, xy + (vec2(0., 1.) - uv_low) / res);
-    vec4 low_s = texture(low_t, xy + (vec2(0., -1.) - uv_low) / res);
-    vec4 low_e = texture(low_t, xy + (vec2(1., 0.) - uv_low) / res);
-    vec4 low_w = texture(low_t, xy + (vec2(-1., 0.) - uv_low) / res);
-    vec4 high_n = texture(high_t, xy + (vec2(0., 1.) - uv_high) / res);
-    vec4 high_s = texture(high_t, xy + (vec2(0., -1.) - uv_high) / res);
-    vec4 high_e = texture(high_t, xy + (vec2(1., 0.) - uv_high) / res);
-    vec4 high_w = texture(high_t, xy + (vec2(-1., 0.) - uv_high) / res);
+    vec2 uv_low = texture(low0_t, xy).xy;
+    vec2 uv_high = texture(high0_t, xy).xy;
+    vec4 low0_n = texture(low0_t, xy + (vec2(0., 1.) - uv_low) / res);
+    vec4 low0_s = texture(low0_t, xy + (vec2(0., -1.) - uv_low) / res);
+    vec4 low0_e = texture(low0_t, xy + (vec2(1., 0.) - uv_low) / res);
+    vec4 low0_w = texture(low0_t, xy + (vec2(-1., 0.) - uv_low) / res);
+    vec4 high0_n = texture(high0_t, xy + (vec2(0., 1.) - uv_high) / res);
+    vec4 high0_s = texture(high0_t, xy + (vec2(0., -1.) - uv_high) / res);
+    vec4 high0_e = texture(high0_t, xy + (vec2(1., 0.) - uv_high) / res);
+    vec4 high0_w = texture(high0_t, xy + (vec2(-1., 0.) - uv_high) / res);
+    vec4 low1_n = texture(low1_t, xy + (vec2(0., 1.) - uv_low) / res);
+    vec4 low1_s = texture(low1_t, xy + (vec2(0., -1.) - uv_low) / res);
+    vec4 low1_e = texture(low1_t, xy + (vec2(1., 0.) - uv_low) / res);
+    vec4 low1_w = texture(low1_t, xy + (vec2(-1., 0.) - uv_low) / res);
+    vec4 high1_n = texture(high1_t, xy + (vec2(0., 1.) - uv_high) / res);
+    vec4 high1_s = texture(high1_t, xy + (vec2(0., -1.) - uv_high) / res);
+    vec4 high1_e = texture(high1_t, xy + (vec2(1., 0.) - uv_high) / res);
+    vec4 high1_w = texture(high1_t, xy + (vec2(-1., 0.) - uv_high) / res);
     vec4 mid_n = texture(mid_t, xy + (vec2(0., K_smooth) - uv_high) / res);
     vec4 mid_s = texture(mid_t, xy + (vec2(0., -K_smooth) - uv_high) / res);
     vec4 mid_e = texture(mid_t, xy + (vec2(K_smooth, 0.) - uv_high) / res);
@@ -90,8 +107,8 @@ void main(){
     vec4 other_w = texture(other_t, xy + (vec2(-1., 0.) - uv_high) / res);
     
     // calculate divergence
-    float div_low = low_n.y - low_s.y + low_e.x - low_w.x;
-    float div_high = high_n.y - high_s.y + high_e.x - high_w.x;
+    float div_low = low0_n.y - low0_s.y + low0_e.x - low0_w.x;
+    float div_high = high0_n.y - high0_s.y + high0_e.x - high0_w.x;
 
     // calculate terrain gradient
     vec2 terrain_gradient = vec2(
@@ -100,31 +117,37 @@ void main(){
     );
 
     // calculate uplift from divergence
-    float uplift = 0.5 * (div_high - div_low) + dot(uv_low, terrain_gradient);
+    float uplift = texture(mid_t, xy - uv_low / res).w;
 
     // convection, low and high include uplift, mid is pure 2D
-    low_out  = texture(low_t,  xy - uv_low  / res) * clamp(1. + uplift, 0., 1.) 
-             + texture(high_t, xy - uv_low  / res) * clamp(    -uplift, 0., 1.);
-    high_out = texture(high_t, xy - uv_high / res) * clamp(1. - uplift, 0., 1.)
-             + texture(low_t,  xy - uv_high / res) * clamp(     uplift, 0., 1.);
+    low0_out  = texture(low0_t,  xy - uv_low  / res) * clamp(1. + uplift, 0., 1.) 
+              + texture(high0_t, xy - uv_low  / res) * clamp(    -uplift, 0., 1.);
+    low1_out  = texture(low1_t,  xy - uv_low  / res) * clamp(1. + uplift, 0., 1.) 
+              + texture(high1_t, xy - uv_low  / res) * clamp(    -uplift, 0., 1.);
+    high0_out = texture(high0_t, xy - uv_high / res) * clamp(1. - uplift, 0., 1.)
+              + texture(low0_t,  xy - uv_high / res) * clamp(     uplift, 0., 1.);
+    high1_out = texture(high1_t, xy - uv_high / res) * clamp(1. - uplift, 0., 1.)
+              + texture(low1_t,  xy - uv_high / res) * clamp(     uplift, 0., 1.);
     mid_out = texture(mid_t, xy - (uv_low + uv_high) / res);
-    mid_out.a = uplift;
     
     // accumulate pressure
-    mid_out.p -= div_low + div_high - K_updraft_pressure * dot(uv_low, terrain_gradient);
+    low1_out.p += -uplift - div_low + dot(uv_low, terrain_gradient);
+    high1_out.p += uplift - div_high;
     
     // smooth pressure
     // TODO: improve filtering, maybe larger window
-    mid_out.p = (mid_out.p + mid_n.p + mid_s.p + mid_e.p + mid_w.p) / 5.;
-    // low_out.xy = (low_out.xy + low_n.xy + low_s.xy + low_e.xy + low_w.xy) / 5.;
-    // high_out.xy = (high_out.xy + high_n.xy + high_s.xy + high_e.xy + high_w.xy) / 5.;
+    low1_out.p = (low1_out.p + low1_n.p + low1_s.p + low1_e.p + low1_w.p) / 5.;
+    high1_out.p = (high1_out.p + high1_n.p + high1_s.p + high1_e.p + high1_w.p) / 5.;
+    low1_out.p = (1. - K_uplift_damping) * low1_out.p + K_uplift_damping * high1_out.p;
+    high1_out.p = (1. - K_uplift_damping) * high1_out.p + K_uplift_damping * low1_out.p;
 
     // decend pressure
-    low_out.x += (mid_w.p - mid_e.p) * K_pressure;
-    low_out.y += (mid_s.p - mid_n.p) * K_pressure;
-    high_out.x += (mid_w.p - mid_e.p) * K_pressure;
-    high_out.y += (mid_s.p - mid_n.p) * K_pressure;
-    
+    // TODO: add uplift
+    low0_out.x += (low1_w.p - low1_e.p) * K_pressure;
+    low0_out.y += (low1_s.p - low1_n.p) * K_pressure;
+    high0_out.x += (high1_w.p - high1_e.p) * K_pressure;
+    high0_out.y += (high1_s.p - high1_n.p) * K_pressure;
+    mid_out.w += (low1_out.p - high1_out.p) * K_pressure_uplift;
     
     // TODO: handle elevation, water, and erosion
     other_out = texture(other_t, xy);
@@ -133,14 +156,14 @@ void main(){
     if ((length(mouse_pos - xy) < pen_size) && (mouse_btns == 1)){
         switch (pen_type){
         case 0:  // all velocity
-            low_out = vec4(pen_vect, 0., 1.);
-            high_out = vec4(pen_vect, 0., 1.);
+            low0_out = vec4(pen_vect, 0., 1.);
+            high0_out = vec4(pen_vect, 0., 1.);
             break;
         case 1:  // low velocity
-            low_out = vec4(pen_vect, 0., 1.);
+            low0_out = vec4(pen_vect, 0., 1.);
             break;
         case 2:  // high velocity
-            high_out = vec4(pen_vect, 0., 1.);
+            high0_out = vec4(pen_vect, 0., 1.);
             break;
         case 3:  // elevation
             float r = length(mouse_pos - xy) / pen_size;
@@ -178,8 +201,10 @@ precision highp int;
 precision highp sampler2D;
 
 uniform int view_mode;
-uniform sampler2D low_t;
-uniform sampler2D high_t;
+uniform sampler2D low0_t;
+uniform sampler2D low1_t;
+uniform sampler2D high0_t;
+uniform sampler2D high1_t;
 uniform sampler2D mid_t;
 uniform sampler2D other_t;
 uniform float pen_size;
@@ -189,8 +214,10 @@ uniform int mouse_btns;
 in vec2 xy;
 out vec4 frag_color;
 
-vec4 low;
-vec4 high;
+vec4 low0;
+vec4 low1;
+vec4 high0;
+vec4 high1;
 vec4 mid;
 vec4 other;
 float vel_low;
@@ -204,40 +231,38 @@ float elevation;
 void main(){
     switch (view_mode){
     case 0:  // low velocity
-        low = texture(low_t, xy);
-        mid = texture(mid_t, xy);
-        vel_low = length(low.xy);
-        pressure = mid.p;
-        h_low = low.a;
+        low0 = texture(low0_t, xy);
+        low1 = texture(low1_t, xy);
+        vel_low = length(low0.xy);
+        pressure = low1.p;
+        h_low = low1.a;
         frag_color = vec4(pressure, vel_low, h_low, 1.);        
         break;
     case 1:  // all velocity
-        low = texture(low_t, xy);
-        high = texture(high_t, xy);
+        low0 = texture(low0_t, xy);
+        low1 = texture(low1_t, xy);
+        high0 = texture(high0_t, xy);
+        high1 = texture(high1_t, xy);
         mid = texture(mid_t, xy);
-        vel_low = length(low.xy);
-        vel_high = length(high.xy);
-        pressure = mid.p;
+        vel_low = length(low0.xy);
+        vel_high = length(high0.xy);
+        pressure = 0.5 * (low1.p + high1.p);
         frag_color = vec4(pressure, vel_low, vel_high, 1.);
         break;
     case 2:  // uplift
-        low = texture(low_t, xy);
-        high = texture(high_t, xy);
+        low1 = texture(low1_t, xy);
+        high1 = texture(high1_t, xy);
         mid = texture(mid_t, xy);
-        vel_low = length(low.xy);
-        vel_high = length(high.xy);
-        uplift = 100. * mid.a;
-        pressure = mid.p;
+        pressure = 0.5 * (low1.p + high1.p);
+        uplift = 100. * mid.w;
         frag_color = vec4(uplift, pressure, -uplift, 1.);
         break;
     case 3:  // elevation
-        low = texture(low_t, xy);
-        high = texture(high_t, xy);
+        low0 = texture(low0_t, xy);
+        high0 = texture(high0_t, xy);
         mid = texture(mid_t, xy);
         other = texture(other_t, xy);
-        vel_low = length(low.xy);
-        vel_high = length(high.xy);
-        uplift = 100. * mid.a;
+        uplift = 100. * mid.w;
         elevation = other.z;
         frag_color = vec4(uplift, elevation, -uplift, 1.);
         break;
@@ -259,7 +284,7 @@ let mouse_state = {
     buttons: 0
 };
 var canvas = null;
-const fps = 30;
+const fps = 10;
 const K_drag = 100;
 
 
@@ -321,8 +346,8 @@ function init(){
     // textures
     let sim_fbo = gl.createFramebuffer();
     let sim_depthbuffer = gl.createRenderbuffer();
-    let tex_names = ['low_t', 'high_t', 'mid_t', 'other_t'];
-    let tex_defaults = [[0.3, 0, 0, 0], [.3, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+    let tex_names = ['low0_t', 'low1_t', 'high0_t', 'high1_t', 'mid_t', 'other_t'];
+    let tex_defaults = [[0.3, 0, 0, 0], [0, 0, 0, 0], [0.3, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
     let textures = [];
     for (var i = 0; i < tex_names.length; i++){
         textures.push({
@@ -341,8 +366,8 @@ function init(){
         gl.COLOR_ATTACHMENT1,
         gl.COLOR_ATTACHMENT2,
         gl.COLOR_ATTACHMENT3,
-        // gl.COLOR_ATTACHMENT4,
-        // gl.COLOR_ATTACHMENT5,
+        gl.COLOR_ATTACHMENT4,
+        gl.COLOR_ATTACHMENT5,
         // gl.COLOR_ATTACHMENT6,
         // gl.COLOR_ATTACHMENT7,
     ]);
