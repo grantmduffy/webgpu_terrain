@@ -234,7 +234,7 @@ void main(){
         low0 = texture(low0_t, xy);
         low1 = texture(low1_t, xy);
         vel_low = length(low0.xy);
-        pressure = low1.p;
+        pressure = low1.p * 10.;
         h_low = low1.a;
         frag_color = vec4(pressure, vel_low, h_low, 1.);        
         break;
@@ -246,14 +246,14 @@ void main(){
         mid = texture(mid_t, xy);
         vel_low = length(low0.xy);
         vel_high = length(high0.xy);
-        pressure = 0.5 * (low1.p + high1.p);
+        pressure = 0.5 * (low1.p + high1.p) * 10.;
         frag_color = vec4(pressure, vel_low, vel_high, 1.);
         break;
     case 2:  // uplift
         low1 = texture(low1_t, xy);
         high1 = texture(high1_t, xy);
         mid = texture(mid_t, xy);
-        pressure = 0.5 * (low1.p + high1.p);
+        pressure = 0.5 * (low1.p + high1.p) * 10.;
         uplift = 100. * mid.w;
         frag_color = vec4(uplift, pressure, -uplift, 1.);
         break;
