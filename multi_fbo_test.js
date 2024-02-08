@@ -189,7 +189,7 @@ in vec2 vert_pos;
 out vec2 xy;
 
 void main(){
-    gl_Position = vec4(vert_pos, 0., 1.);
+    gl_Position = vec4(vert_pos, .99, 1.);
     xy = vert_pos * 0.5 + 0.5;
 }
 
@@ -274,6 +274,41 @@ void main(){
 
 `;
 
+let arrow_vs_src = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
+
+uniform sampler2D low0_t;
+uniform sampler2D high0_t;
+
+in vec3 vert_pos;
+out vec2 xy;
+
+void main(){
+    vec2 pos = vert_pos.xy;
+    xy = pos * 0.5 + 0.5;
+    float a = vert_pos.z;
+    vec2 uv = texture(low0_t, xy).xy;
+    gl_Position = vec4(pos + a * uv * 0.1, 0., 1.);
+    // gl_Position = vec4(pos, 0., 1.);
+}
+
+`;
+
+let arrow_fs_src = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
+
+in vec2 xy;
+out vec4 frag_color;
+
+void main(){
+    frag_color = vec4(1., 1., 1., 1.);
+}
+
+`;
 
 var [width, height] = [1, 1];
 let mouse_state = {
@@ -299,6 +334,19 @@ function mouse_move(event){
 }
 
 
+function get_arrows(n = 20){
+    let out = [];
+    for (var i = 0; i < n; i++){
+        let x = 2 * i / (n - 1) - 1;
+        for (var j = 0; j < n; j++){
+            let y = 2 * j / (n - 1) - 1;
+            out.push([x, y, 0, x, y, 1]);
+        }
+    }
+    return out;
+}
+
+
 function init(){
     canvas = document.getElementById('gl-canvas')
     setup_gl(canvas);
@@ -321,33 +369,28 @@ function init(){
     let render_vs = compile_shader(render_vs_src, gl.VERTEX_SHADER, '');
     let render_fs = compile_shader(render_fs_src, gl.FRAGMENT_SHADER, '');
     let render_program = link_program(render_vs, render_fs);
+    let arrow_vs = compile_shader(arrow_vs_src, gl.VERTEX_SHADER, '');
+    let arrow_fs = compile_shader(arrow_fs_src, gl.FRAGMENT_SHADER, '');
+    let arrow_program = link_program(arrow_vs, arrow_fs);
 
     // setup buffers
     let vertex_buffer = create_buffer(new Float32Array(screen_mesh[0].flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
-    gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
     let tri_buffer = create_buffer(new Uint16Array(screen_mesh[1].flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, tri_buffer)
     let sim_pos_attr_loc = gl.getAttribLocation(sim_program, 'vert_pos');
-    gl.vertexAttribPointer(
-        sim_pos_attr_loc, 2,
-        gl.FLOAT, gl.FALSE,
-        2 * 4, 0
-    );
     gl.enableVertexAttribArray(sim_pos_attr_loc);
     let render_pos_attr_loc = gl.getAttribLocation(render_program, 'vert_pos');
-    gl.vertexAttribPointer(
-        render_pos_attr_loc, 2,
-        gl.FLOAT, gl.FALSE,
-        2 * 4, 0
-    );
     gl.enableVertexAttribArray(render_pos_attr_loc);
+    arrows = get_arrows(50);
+    let arrow_buffer = create_buffer(new Float32Array(arrows.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+    let arrow_pos_attr_loc = gl.getAttribLocation(arrow_program, 'vert_pos');
+    gl.enableVertexAttribArray(arrow_pos_attr_loc);
 
 
     // textures
     let sim_fbo = gl.createFramebuffer();
     let sim_depthbuffer = gl.createRenderbuffer();
     let tex_names = ['low0_t', 'low1_t', 'high0_t', 'high1_t', 'mid_t', 'other_t'];
-    let tex_defaults = [[0.3, 0, 0, 0], [0, 0, 0, 0], [0.3, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+    let tex_defaults = [[0., 0, 0, 0], [0, 0, 0, 0], [0., 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
     let textures = [];
     for (var i = 0; i < tex_names.length; i++){
         textures.push({
@@ -371,12 +414,19 @@ function init(){
         // gl.COLOR_ATTACHMENT6,
         // gl.COLOR_ATTACHMENT7,
     ]);
-
+    
     let loop = function(){
 
         // sim program
         gl.useProgram(sim_program);
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, tri_buffer);
         gl.bindFramebuffer(gl.FRAMEBUFFER, sim_fbo);
+        gl.vertexAttribPointer(
+            render_pos_attr_loc, 2,
+            gl.FLOAT, gl.FALSE,
+            2 * 4, 0
+        );
         for (var i = 0; i < textures.length; i++){
 
             // swap textures
@@ -425,6 +475,20 @@ function init(){
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
         gl.drawElements(gl.TRIANGLES, 3 * screen_mesh[1].length, gl.UNSIGNED_SHORT, 0);
+
+        // draw arrows
+        gl.useProgram(arrow_program);
+        gl.bindBuffer(gl.ARRAY_BUFFER, arrow_buffer);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+        gl.vertexAttribPointer(
+            arrow_pos_attr_loc, 3,
+            gl.FLOAT, gl.FALSE,
+            3 * 4, 0
+        );
+        for (var i = 0; i < textures.length; i++){
+            gl.uniform1i(gl.getUniformLocation(arrow_program, textures[i].name), i);
+        }
+        gl.drawArrays(gl.LINES, 0, arrows.length * 2);
 
         // setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
         requestAnimationFrame(loop);  // unlimited fps
