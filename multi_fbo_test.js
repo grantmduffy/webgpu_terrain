@@ -45,11 +45,12 @@ precision highp sampler2D;
 
 #define K_pressure 0.1
 #define K_pressure_uplift 0.01
+#define K_pressure_uplift_acc 10.
+#define K_pressure_decay 0.999
 #define K_uplift_damping 0.05
 #define K_p_decay .9
 #define K_smooth 1.0
 #define K_elevation_strength 0.01
-#define K_updraft_pressure 1.
 
 uniform vec2 mouse_pos;
 uniform int mouse_btns;
@@ -131,7 +132,7 @@ void main(){
     mid_out = texture(mid_t, xy - (uv_low + uv_high) / res);
     
     // accumulate pressure
-    low1_out.p += -uplift - div_low + dot(uv_low, terrain_gradient);
+    low1_out.p += -uplift - div_low + dot(uv_low, terrain_gradient) * K_pressure_uplift_acc;
     high1_out.p += uplift - div_high;
     
     // smooth pressure
@@ -140,6 +141,8 @@ void main(){
     high1_out.p = (high1_out.p + high1_n.p + high1_s.p + high1_e.p + high1_w.p) / 5.;
     low1_out.p = (1. - K_uplift_damping) * low1_out.p + K_uplift_damping * high1_out.p;
     high1_out.p = (1. - K_uplift_damping) * high1_out.p + K_uplift_damping * low1_out.p;
+    low1_out.p *= K_pressure_decay;
+    high1_out.p *= K_pressure_decay;
 
     // decend pressure
     // TODO: add uplift
@@ -390,13 +393,13 @@ function init(){
     let sim_fbo = gl.createFramebuffer();
     let sim_depthbuffer = gl.createRenderbuffer();
     let tex_names = ['low0_t', 'low1_t', 'high0_t', 'high1_t', 'mid_t', 'other_t'];
-    let tex_defaults = [[0., 0, 0, 0], [0, 0, 0, 0], [0., 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+    let tex_defaults = [[0.1, 0, 0, 0], [0, 0, 0, 0], [0.1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
     let textures = [];
     for (var i = 0; i < tex_names.length; i++){
         textures.push({
             'name': tex_names[i],
-            'in_tex': create_texture(width, height, tex_defaults[i], i, 'clamp'),
-            'out_tex': create_texture(width, height, tex_defaults[i], i, 'clamp')
+            'in_tex': create_texture(width, height, tex_defaults[i], i, 'tile'),
+            'out_tex': create_texture(width, height, tex_defaults[i], i, 'tile')
         });
     }
 
