@@ -54,7 +54,7 @@ precision highp sampler2D;
 
 uniform vec2 mouse_pos;
 uniform int mouse_btns;
-uniform vec2 res;
+uniform vec2 sim_res;
 uniform float pen_size;
 uniform float pen_strength;
 uniform int pen_type;
@@ -82,30 +82,30 @@ void main(){
     // backward convection
     vec2 uv_low = texture(low0_t, xy).xy;
     vec2 uv_high = texture(high0_t, xy).xy;
-    vec4 low0_n = texture(low0_t, xy + (vec2(0., 1.) - uv_low) / res);
-    vec4 low0_s = texture(low0_t, xy + (vec2(0., -1.) - uv_low) / res);
-    vec4 low0_e = texture(low0_t, xy + (vec2(1., 0.) - uv_low) / res);
-    vec4 low0_w = texture(low0_t, xy + (vec2(-1., 0.) - uv_low) / res);
-    vec4 high0_n = texture(high0_t, xy + (vec2(0., 1.) - uv_high) / res);
-    vec4 high0_s = texture(high0_t, xy + (vec2(0., -1.) - uv_high) / res);
-    vec4 high0_e = texture(high0_t, xy + (vec2(1., 0.) - uv_high) / res);
-    vec4 high0_w = texture(high0_t, xy + (vec2(-1., 0.) - uv_high) / res);
-    vec4 low1_n = texture(low1_t, xy + (vec2(0., 1.) - uv_low) / res);
-    vec4 low1_s = texture(low1_t, xy + (vec2(0., -1.) - uv_low) / res);
-    vec4 low1_e = texture(low1_t, xy + (vec2(1., 0.) - uv_low) / res);
-    vec4 low1_w = texture(low1_t, xy + (vec2(-1., 0.) - uv_low) / res);
-    vec4 high1_n = texture(high1_t, xy + (vec2(0., 1.) - uv_high) / res);
-    vec4 high1_s = texture(high1_t, xy + (vec2(0., -1.) - uv_high) / res);
-    vec4 high1_e = texture(high1_t, xy + (vec2(1., 0.) - uv_high) / res);
-    vec4 high1_w = texture(high1_t, xy + (vec2(-1., 0.) - uv_high) / res);
-    vec4 mid_n = texture(mid_t, xy + (vec2(0., K_smooth) - uv_high) / res);
-    vec4 mid_s = texture(mid_t, xy + (vec2(0., -K_smooth) - uv_high) / res);
-    vec4 mid_e = texture(mid_t, xy + (vec2(K_smooth, 0.) - uv_high) / res);
-    vec4 mid_w = texture(mid_t, xy + (vec2(-K_smooth, 0.) - uv_high) / res);
-    vec4 other_n = texture(other_t, xy + (vec2(0., 1.) - uv_high) / res);
-    vec4 other_s = texture(other_t, xy + (vec2(0., -1.) - uv_high) / res);
-    vec4 other_e = texture(other_t, xy + (vec2(1., 0.) - uv_high) / res);
-    vec4 other_w = texture(other_t, xy + (vec2(-1., 0.) - uv_high) / res);
+    vec4 low0_n = texture(low0_t, xy + (vec2(0., 1.) - uv_low) / sim_res);
+    vec4 low0_s = texture(low0_t, xy + (vec2(0., -1.) - uv_low) / sim_res);
+    vec4 low0_e = texture(low0_t, xy + (vec2(1., 0.) - uv_low) / sim_res);
+    vec4 low0_w = texture(low0_t, xy + (vec2(-1., 0.) - uv_low) / sim_res);
+    vec4 high0_n = texture(high0_t, xy + (vec2(0., 1.) - uv_high) / sim_res);
+    vec4 high0_s = texture(high0_t, xy + (vec2(0., -1.) - uv_high) / sim_res);
+    vec4 high0_e = texture(high0_t, xy + (vec2(1., 0.) - uv_high) / sim_res);
+    vec4 high0_w = texture(high0_t, xy + (vec2(-1., 0.) - uv_high) / sim_res);
+    vec4 low1_n = texture(low1_t, xy + (vec2(0., 1.) - uv_low) / sim_res);
+    vec4 low1_s = texture(low1_t, xy + (vec2(0., -1.) - uv_low) / sim_res);
+    vec4 low1_e = texture(low1_t, xy + (vec2(1., 0.) - uv_low) / sim_res);
+    vec4 low1_w = texture(low1_t, xy + (vec2(-1., 0.) - uv_low) / sim_res);
+    vec4 high1_n = texture(high1_t, xy + (vec2(0., 1.) - uv_high) / sim_res);
+    vec4 high1_s = texture(high1_t, xy + (vec2(0., -1.) - uv_high) / sim_res);
+    vec4 high1_e = texture(high1_t, xy + (vec2(1., 0.) - uv_high) / sim_res);
+    vec4 high1_w = texture(high1_t, xy + (vec2(-1., 0.) - uv_high) / sim_res);
+    vec4 mid_n = texture(mid_t, xy + (vec2(0., K_smooth) - uv_high) / sim_res);
+    vec4 mid_s = texture(mid_t, xy + (vec2(0., -K_smooth) - uv_high) / sim_res);
+    vec4 mid_e = texture(mid_t, xy + (vec2(K_smooth, 0.) - uv_high) / sim_res);
+    vec4 mid_w = texture(mid_t, xy + (vec2(-K_smooth, 0.) - uv_high) / sim_res);
+    vec4 other_n = texture(other_t, xy + (vec2(0., 1.) - uv_high) / sim_res);
+    vec4 other_s = texture(other_t, xy + (vec2(0., -1.) - uv_high) / sim_res);
+    vec4 other_e = texture(other_t, xy + (vec2(1., 0.) - uv_high) / sim_res);
+    vec4 other_w = texture(other_t, xy + (vec2(-1., 0.) - uv_high) / sim_res);
     
     // calculate divergence
     float div_low = low0_n.y - low0_s.y + low0_e.x - low0_w.x;
@@ -118,18 +118,18 @@ void main(){
     );
 
     // calculate uplift from divergence
-    float uplift = texture(mid_t, xy - uv_low / res).w;
+    float uplift = texture(mid_t, xy - uv_low / sim_res).w;
 
     // convection, low and high include uplift, mid is pure 2D
-    low0_out  = texture(low0_t,  xy - uv_low  / res) * clamp(1. + uplift, 0., 1.) 
-              + texture(high0_t, xy - uv_low  / res) * clamp(    -uplift, 0., 1.);
-    low1_out  = texture(low1_t,  xy - uv_low  / res) * clamp(1. + uplift, 0., 1.) 
-              + texture(high1_t, xy - uv_low  / res) * clamp(    -uplift, 0., 1.);
-    high0_out = texture(high0_t, xy - uv_high / res) * clamp(1. - uplift, 0., 1.)
-              + texture(low0_t,  xy - uv_high / res) * clamp(     uplift, 0., 1.);
-    high1_out = texture(high1_t, xy - uv_high / res) * clamp(1. - uplift, 0., 1.)
-              + texture(low1_t,  xy - uv_high / res) * clamp(     uplift, 0., 1.);
-    mid_out = texture(mid_t, xy - (uv_low + uv_high) / res);
+    low0_out  = texture(low0_t,  xy - uv_low  / sim_res) * clamp(1. + uplift, 0., 1.) 
+              + texture(high0_t, xy - uv_low  / sim_res) * clamp(    -uplift, 0., 1.);
+    low1_out  = texture(low1_t,  xy - uv_low  / sim_res) * clamp(1. + uplift, 0., 1.) 
+              + texture(high1_t, xy - uv_low  / sim_res) * clamp(    -uplift, 0., 1.);
+    high0_out = texture(high0_t, xy - uv_high / sim_res) * clamp(1. - uplift, 0., 1.)
+              + texture(low0_t,  xy - uv_high / sim_res) * clamp(     uplift, 0., 1.);
+    high1_out = texture(high1_t, xy - uv_high / sim_res) * clamp(1. - uplift, 0., 1.)
+              + texture(low1_t,  xy - uv_high / sim_res) * clamp(     uplift, 0., 1.);
+    mid_out = texture(mid_t, xy - (uv_low + uv_high) / sim_res);
     
     // accumulate pressure
     low1_out.p += -uplift - div_low + dot(uv_low, terrain_gradient) * K_pressure_uplift_acc;
@@ -183,7 +183,7 @@ void main(){
 
 `;
 
-let render_vs_src = `#version 300 es
+let render2d_vs_src = `#version 300 es
 precision highp float;
 precision highp int;
 precision highp sampler2D;
@@ -198,7 +198,7 @@ void main(){
 
 `;
 
-let render_fs_src = `#version 300 es
+let render2d_fs_src = `#version 300 es
 precision highp float;
 precision highp int;
 precision highp sampler2D;
@@ -324,6 +324,7 @@ let mouse_state = {
 var canvas = null;
 const fps = 10;
 const K_drag = 100;
+const sim_res = 512;
 
 
 function mouse_move(event){
@@ -393,9 +394,9 @@ function init(){
     let sim_vs = compile_shader(sim_vs_src, gl.VERTEX_SHADER, '');
     let sim_fs = compile_shader(sim_fs_src, gl.FRAGMENT_SHADER, '');
     let sim_program = link_program(sim_vs, sim_fs);
-    let render_vs = compile_shader(render_vs_src, gl.VERTEX_SHADER, '');
-    let render_fs = compile_shader(render_fs_src, gl.FRAGMENT_SHADER, '');
-    let render_program = link_program(render_vs, render_fs);
+    let render2d_vs = compile_shader(render2d_vs_src, gl.VERTEX_SHADER, '');
+    let render2d_fs = compile_shader(render2d_fs_src, gl.FRAGMENT_SHADER, '');
+    let render2d_program = link_program(render2d_vs, render2d_fs);
     let arrow_vs = compile_shader(arrow_vs_src, gl.VERTEX_SHADER, '');
     let arrow_fs = compile_shader(arrow_fs_src, gl.FRAGMENT_SHADER, '');
     let arrow_program = link_program(arrow_vs, arrow_fs);
@@ -405,8 +406,8 @@ function init(){
     let tri_buffer = create_buffer(new Uint16Array(screen_mesh[1].flat()), gl.ELEMENT_ARRAY_BUFFER, gl.STATIC_DRAW);
     let sim_pos_attr_loc = gl.getAttribLocation(sim_program, 'vert_pos');
     gl.enableVertexAttribArray(sim_pos_attr_loc);
-    let render_pos_attr_loc = gl.getAttribLocation(render_program, 'vert_pos');
-    gl.enableVertexAttribArray(render_pos_attr_loc);
+    let render2d_pos_attr_loc = gl.getAttribLocation(render2d_program, 'vert_pos');
+    gl.enableVertexAttribArray(render2d_pos_attr_loc);
     arrows = get_arrows(50);
     let arrow_buffer = create_buffer(new Float32Array(arrows.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let arrow_pos_attr_loc = gl.getAttribLocation(arrow_program, 'vert_pos');
@@ -422,14 +423,14 @@ function init(){
     for (var i = 0; i < tex_names.length; i++){
         textures.push({
             'name': tex_names[i],
-            'in_tex': create_texture(width, height, tex_defaults[i], i, 'tile'),
-            'out_tex': create_texture(width, height, tex_defaults[i], i, 'tile')
+            'in_tex': create_texture(sim_res, sim_res, tex_defaults[i], i, 'tile'),
+            'out_tex': create_texture(sim_res, sim_res, tex_defaults[i], i, 'tile')
         });
     }
 
     // setup fbo
     gl.bindRenderbuffer(gl.RENDERBUFFER, sim_depthbuffer);
-    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, sim_res, sim_res);
     gl.bindFramebuffer(gl.FRAMEBUFFER, sim_fbo);
     gl.drawBuffers([
         gl.COLOR_ATTACHMENT0,
@@ -446,11 +447,12 @@ function init(){
 
         // sim program
         gl.useProgram(sim_program);
+        gl.viewport(0, 0, sim_res, sim_res);
         gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, tri_buffer);
         gl.bindFramebuffer(gl.FRAMEBUFFER, sim_fbo);
         gl.vertexAttribPointer(
-            render_pos_attr_loc, 2,
+            render2d_pos_attr_loc, 2,
             gl.FLOAT, gl.FALSE,
             2 * 4, 0
         );
@@ -477,7 +479,7 @@ function init(){
         // set uniforms
         gl.uniform2f(gl.getUniformLocation(sim_program, 'mouse_pos'), mouse_state.x, mouse_state.y);
         gl.uniform1i(gl.getUniformLocation(sim_program, 'mouse_btns'), mouse_state.buttons);
-        gl.uniform2f(gl.getUniformLocation(sim_program, 'res'), width, height);
+        gl.uniform2f(gl.getUniformLocation(sim_program, 'sim_res'), sim_res, sim_res);
         gl.uniform1i(gl.getUniformLocation(sim_program, 'pen_type'), pen_type_options.indexOf(pen_type_el.value));
         gl.uniform1f(gl.getUniformLocation(sim_program, 'pen_size'), document.getElementById('pen-size').value);
         gl.uniform1f(gl.getUniformLocation(sim_program, 'pen_strength'), document.getElementById('pen-strength').value);
@@ -488,34 +490,39 @@ function init(){
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
         gl.drawElements(gl.TRIANGLES, 3 * screen_mesh[1].length, gl.UNSIGNED_SHORT, 0);
 
-        // draw render
-        gl.useProgram(render_program);
-        for (var i = 0; i < textures.length; i++){
-            gl.uniform1i(gl.getUniformLocation(render_program, textures[i].name), i);
-        }
-        gl.uniform2f(gl.getUniformLocation(render_program, 'res'), width, height);
-        gl.uniform1i(gl.getUniformLocation(render_program, 'view_mode'), view_mode_options.indexOf(view_mode_el.value));
-        gl.uniform1f(gl.getUniformLocation(render_program, 'pen_size'), document.getElementById('pen-size').value);
-        gl.uniform2f(gl.getUniformLocation(render_program, 'mouse_pos'), mouse_state.x, mouse_state.y);
-        gl.uniform1i(gl.getUniformLocation(render_program, 'mouse_btns'), mouse_state.buttons);
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        gl.clearColor(0, 0, 0, 0);
-        gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
-        gl.drawElements(gl.TRIANGLES, 3 * screen_mesh[1].length, gl.UNSIGNED_SHORT, 0);
+        if (view_mode_el.value != '3d'){
+            
+            // draw render2d
+            gl.useProgram(render2d_program);
+            for (var i = 0; i < textures.length; i++){
+                gl.uniform1i(gl.getUniformLocation(render2d_program, textures[i].name), i);
+            }
+            gl.uniform2f(gl.getUniformLocation(render2d_program, 'sim_res'), sim_res, sim_res);
+            gl.uniform1i(gl.getUniformLocation(render2d_program, 'view_mode'), view_mode_options.indexOf(view_mode_el.value));
+            gl.uniform1f(gl.getUniformLocation(render2d_program, 'pen_size'), document.getElementById('pen-size').value);
+            gl.uniform2f(gl.getUniformLocation(render2d_program, 'mouse_pos'), mouse_state.x, mouse_state.y);
+            gl.uniform1i(gl.getUniformLocation(render2d_program, 'mouse_btns'), mouse_state.buttons);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            gl.clearColor(0, 0, 0, 0);
+            gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
+            gl.drawElements(gl.TRIANGLES, 3 * screen_mesh[1].length, gl.UNSIGNED_SHORT, 0);
 
-        // draw arrows
-        gl.useProgram(arrow_program);
-        gl.bindBuffer(gl.ARRAY_BUFFER, arrow_buffer);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
-        gl.vertexAttribPointer(
-            arrow_pos_attr_loc, 3,
-            gl.FLOAT, gl.FALSE,
-            3 * 4, 0
-        );
-        for (var i = 0; i < textures.length; i++){
-            gl.uniform1i(gl.getUniformLocation(arrow_program, textures[i].name), i);
+            // draw arrows
+            gl.useProgram(arrow_program);
+            gl.bindBuffer(gl.ARRAY_BUFFER, arrow_buffer);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+            gl.vertexAttribPointer(
+                arrow_pos_attr_loc, 3,
+                gl.FLOAT, gl.FALSE,
+                3 * 4, 0
+            );
+            for (var i = 0; i < textures.length; i++){
+                gl.uniform1i(gl.getUniformLocation(arrow_program, textures[i].name), i);
+            }
+            gl.drawArrays(gl.LINES, 0, arrows.length * 2);
+        } else {
+            
         }
-        gl.drawArrays(gl.LINES, 0, arrows.length * 2);
 
         // setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
         requestAnimationFrame(loop);  // unlimited fps
