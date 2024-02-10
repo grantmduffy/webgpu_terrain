@@ -313,6 +313,35 @@ void main(){
 
 `;
 
+let render3d_vs_src = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
+
+in vec2 vert_pos;
+out vec2 xy;
+
+void main(){
+    gl_Position = vec4(vert_pos * 2. - 1., 0., 1.);
+    xy = vert_pos;
+}
+`;
+
+let render3d_fs_src = `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
+
+in vec2 xy;
+out vec4 frag_color;
+
+void main(){
+    frag_color = vec4(0., 1., 1., 1.);
+}
+`;
+
+
+
 var [width, height] = [1, 1];
 let mouse_state = {
     x: 0.5,
@@ -325,6 +354,8 @@ var canvas = null;
 const fps = 10;
 const K_drag = 100;
 const sim_res = 512;
+const render_width = 640;
+const render_height = 480;
 
 
 function mouse_move(event){
@@ -400,6 +431,9 @@ function init(){
     let arrow_vs = compile_shader(arrow_vs_src, gl.VERTEX_SHADER, '');
     let arrow_fs = compile_shader(arrow_fs_src, gl.FRAGMENT_SHADER, '');
     let arrow_program = link_program(arrow_vs, arrow_fs);
+    let render3d_vs = compile_shader(render3d_vs_src, gl.VERTEX_SHADER, '');
+    let render3d_fs = compile_shader(render3d_fs_src, gl.FRAGMENT_SHADER, '');
+    let render3d_program = link_program(render3d_vs, render3d_fs);
 
     // setup buffers
     let vertex_buffer = create_buffer(new Float32Array(screen_mesh[0].flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
@@ -412,6 +446,9 @@ function init(){
     let arrow_buffer = create_buffer(new Float32Array(arrows.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let arrow_pos_attr_loc = gl.getAttribLocation(arrow_program, 'vert_pos');
     gl.enableVertexAttribArray(arrow_pos_attr_loc);
+    grid_mesh = get_grid_mesh(2, 2);
+    let grid_mesh_buffer = create_buffer(new Float32Array(grid_mesh.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
+    let grid_mesh_attr_loc = gl.getAttribLocation(render3d_program, 'vert_pos');
 
 
     // textures
@@ -491,6 +528,9 @@ function init(){
         gl.drawElements(gl.TRIANGLES, 3 * screen_mesh[1].length, gl.UNSIGNED_SHORT, 0);
 
         if (view_mode_el.value != '3d'){
+
+            canvas.width = sim_res;
+            canvas.height = sim_res;
             
             // draw render2d
             gl.useProgram(render2d_program);
@@ -521,7 +561,23 @@ function init(){
             }
             gl.drawArrays(gl.LINES, 0, arrows.length * 2);
         } else {
-            
+            canvas.width = render_width;
+            canvas.height = render_height;
+
+            gl.viewport(0, 0, render_width, render_height);
+            gl.useProgram(render3d_program);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            gl.bindBuffer(gl.ARRAY_BUFFER, grid_mesh_buffer);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+            gl.vertexAttribPointer(
+                grid_mesh_attr_loc, 2,
+                gl.FLOAT, gl.FALSE,
+                2 * 4, 0
+            );
+            for (var i = 0; i < textures.length; i++){
+                gl.uniform1i(gl.getUniformLocation(render3d_program, textures[i].name), i);
+            }
+            gl.drawArrays(gl.TRIANGLES, 0, grid_mesh.length * 3);
         }
 
         // setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
