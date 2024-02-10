@@ -350,6 +350,30 @@ function get_arrows(n = 20){
 }
 
 
+function get_grid_mesh(n = 512, m = 512){
+    let out = [];
+    for (var i = 0; i < n; i++){
+        for (var j = 0; j < m; j++){
+            let x0 = j / m;
+            let y0 = i / n;
+            let x1 = (j + 1) / m;
+            let y1 = (i + 1) / n;
+            out.push([
+                x0, y0,
+                x1, y0,
+                x1, y1,
+            ]);
+            out.push([
+                x0, y0,
+                x1, y1,
+                x0, y1
+            ]);
+        }
+    }
+    return out;
+}
+
+
 function init(){
     canvas = document.getElementById('gl-canvas')
     setup_gl(canvas);
