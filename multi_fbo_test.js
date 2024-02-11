@@ -318,12 +318,19 @@ precision highp float;
 precision highp int;
 precision highp sampler2D;
 
+uniform mat4 M_camera;
+uniform sampler2D other_t;
+
 in vec2 vert_pos;
+out vec3 xyz;
 out vec2 xy;
 
 void main(){
-    gl_Position = vec4(vert_pos * 2. - 1., 0., 1.);
     xy = vert_pos;
+    vec4 other = texture(other_t, xy);
+    float elevation = other.z;
+    xyz = vec3(vert_pos, elevation);
+    gl_Position = M_camera * vec4(xyz, 1.);
 }
 `;
 
@@ -332,11 +339,24 @@ precision highp float;
 precision highp int;
 precision highp sampler2D;
 
-in vec2 xy;
+uniform sampler2D low0_t;
+uniform sampler2D high0_t;
+uniform sampler2D mid_t;
+uniform sampler2D other_t;
+
+
+in vec3 xyz;
 out vec4 frag_color;
 
 void main(){
-    frag_color = vec4(0., 1., 1., 1.);
+    vec2 xy = xyz.xy;
+    vec4 low0 = texture(low0_t, xy);
+    vec4 high0 = texture(high0_t, xy);
+    vec4 mid = texture(mid_t, xy);
+    vec4 other = texture(other_t, xy);
+    float uplift = 100. * mid.w;
+    float elevation = other.z;
+    frag_color = vec4(uplift, elevation, -uplift, 1.);
 }
 `;
 
@@ -356,6 +376,8 @@ const K_drag = 100;
 const sim_res = 512;
 const render_width = 640;
 const render_height = 480;
+let M_camera = new Float32Array(16);
+let M_perpective = new Float32Array(16);
 
 
 function mouse_move(event){
@@ -390,6 +412,8 @@ function get_grid_mesh(n = 512, m = 512){
             let y0 = i / n;
             let x1 = (j + 1) / m;
             let y1 = (i + 1) / n;
+            // x0 += 0.1 / m;
+            // y0 += 0.1 / n;
             out.push([
                 x0, y0,
                 x1, y0,
@@ -412,6 +436,7 @@ function init(){
     [width, height] = [canvas.width, canvas.height];
     let pen_type_options = [];
     let pen_type_el = document.getElementById('pen-type');
+    let render_mode_el = document.getElementById('render-mode');
     for (var i = 0; i < pen_type_el.children.length; i++){
         pen_type_options.push(pen_type_el.children[i].value);
     }
@@ -432,7 +457,8 @@ function init(){
     let arrow_fs = compile_shader(arrow_fs_src, gl.FRAGMENT_SHADER, '');
     let arrow_program = link_program(arrow_vs, arrow_fs);
     let render3d_vs = compile_shader(render3d_vs_src, gl.VERTEX_SHADER, '');
-    let render3d_fs = compile_shader(render3d_fs_src, gl.FRAGMENT_SHADER, '');
+    // let render3d_fs = compile_shader(render3d_fs_src, gl.FRAGMENT_SHADER, '');
+    let render3d_fs = compile_shader(render2d_fs_src, gl.FRAGMENT_SHADER, '');
     let render3d_program = link_program(render3d_vs, render3d_fs);
 
     // setup buffers
@@ -446,7 +472,7 @@ function init(){
     let arrow_buffer = create_buffer(new Float32Array(arrows.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let arrow_pos_attr_loc = gl.getAttribLocation(arrow_program, 'vert_pos');
     gl.enableVertexAttribArray(arrow_pos_attr_loc);
-    grid_mesh = get_grid_mesh(2, 2);
+    grid_mesh = get_grid_mesh(sim_res, sim_res);
     let grid_mesh_buffer = create_buffer(new Float32Array(grid_mesh.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let grid_mesh_attr_loc = gl.getAttribLocation(render3d_program, 'vert_pos');
 
@@ -527,7 +553,7 @@ function init(){
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
         gl.drawElements(gl.TRIANGLES, 3 * screen_mesh[1].length, gl.UNSIGNED_SHORT, 0);
 
-        if (view_mode_el.value != '3d'){
+        if (render_mode_el.value != '3d'){
 
             canvas.width = sim_res;
             canvas.height = sim_res;
@@ -543,7 +569,7 @@ function init(){
             gl.uniform2f(gl.getUniformLocation(render2d_program, 'mouse_pos'), mouse_state.x, mouse_state.y);
             gl.uniform1i(gl.getUniformLocation(render2d_program, 'mouse_btns'), mouse_state.buttons);
             gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-            gl.clearColor(0, 0, 0, 0);
+            gl.clearColor(0, 0, 0, 1);
             gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
             gl.drawElements(gl.TRIANGLES, 3 * screen_mesh[1].length, gl.UNSIGNED_SHORT, 0);
 
@@ -561,6 +587,14 @@ function init(){
             }
             gl.drawArrays(gl.LINES, 0, arrows.length * 2);
         } else {
+
+            // drawing 3D
+            mat4.lookAt(M_camera, [-0.25, -0.25, 2], [0.5, 0.5, 0], [0, 0, 1]);
+            // mat4.invert(M_camera, M_camera);
+            mat4.perspective(M_perpective, 45 * 3.14 / 180, render_width / render_height, 0.1, 10);
+            mat4.multiply(M_camera, M_perpective, M_camera);
+            // mat4.identity(M_camera);
+
             canvas.width = render_width;
             canvas.height = render_height;
 
@@ -574,9 +608,17 @@ function init(){
                 gl.FLOAT, gl.FALSE,
                 2 * 4, 0
             );
+            gl.uniform2f(gl.getUniformLocation(render3d_program, 'sim_res'), sim_res, sim_res);
+            gl.uniform1i(gl.getUniformLocation(render3d_program, 'view_mode'), view_mode_options.indexOf(view_mode_el.value));
+            gl.uniform1f(gl.getUniformLocation(render3d_program, 'pen_size'), document.getElementById('pen-size').value);
+            gl.uniform2f(gl.getUniformLocation(render3d_program, 'mouse_pos'), mouse_state.x, mouse_state.y);
+            gl.uniform1i(gl.getUniformLocation(render3d_program, 'mouse_btns'), mouse_state.buttons);
+            gl.uniformMatrix4fv(gl.getUniformLocation(render3d_program, 'M_camera'), gl.FALSE, M_camera);
             for (var i = 0; i < textures.length; i++){
                 gl.uniform1i(gl.getUniformLocation(render3d_program, textures[i].name), i);
             }
+            gl.clearColor(0, 0, 0, 1);
+            gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
             gl.drawArrays(gl.TRIANGLES, 0, grid_mesh.length * 3);
         }
 
