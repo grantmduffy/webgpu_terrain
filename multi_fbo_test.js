@@ -54,6 +54,7 @@ precision highp sampler2D;
 
 uniform vec2 mouse_pos;
 uniform int mouse_btns;
+uniform int keys;
 uniform vec2 sim_res;
 uniform float pen_size;
 uniform float pen_strength;
@@ -156,7 +157,7 @@ void main(){
     other_out = texture(other_t, xy);
 
     vec2 pen_vect = pen_vel * pen_strength;
-    if ((length(mouse_pos - xy) < pen_size) && (mouse_btns == 1)){
+    if ((length(mouse_pos - xy) < pen_size) && (mouse_btns == 1) && (keys == 0)){
         switch (pen_type){
         case 0:  // all velocity
             low0_out = vec4(pen_vect, 0., 1.);
@@ -378,16 +379,59 @@ const render_width = 640;
 const render_height = 480;
 let M_camera = new Float32Array(16);
 let M_perpective = new Float32Array(16);
+let camera_pos = [0.5, 0.5, 0.25];
+let camera_rot = [45, 0];
+const PI = 3.14159
+const walk_speed = 0.003;
+const look_speed = 1.;
+const vert_speed = 0.001;
+
+function invert_vect(arr){
+    let out = [];
+    for (var i = 0; i < arr.length; i++){
+        out.push(-arr[i]);
+    }
+    return out;
+}
 
 
 function mouse_move(event){
-    let new_x = event.offsetX / width;
-    let new_y = 1 - event.offsetY / height;
+    let new_x = event.offsetX / canvas.width;
+    let new_y = 1 - event.offsetY / canvas.height;
     mouse_state.vel_x = (new_x - mouse_state.x) * K_drag;
     mouse_state.vel_y = (new_y - mouse_state.y) * K_drag;
     mouse_state.x = new_x;
     mouse_state.y = new_y;
     mouse_state.buttons = event.buttons;
+    if (event.shiftKey){
+        mouse_state.keys = 1;
+    } else if (event.ctrlKey){
+        mouse_state.keys = 2;
+    } else if (event.altKey){
+        mouse_state.keys = 3;
+    } else {
+        mouse_state.keys = 0;
+    }
+
+    if (mouse_state.buttons == 1){
+        if (mouse_state.keys == 1){
+            // rotate camera
+            camera_rot[0] -= mouse_state.vel_y * look_speed;
+            camera_rot[1] += mouse_state.vel_x * look_speed;
+        }
+        if (mouse_state.keys == 2){
+            // translate camera
+            let t = camera_rot[1] * PI / 180;
+            camera_pos[0] -= walk_speed * (mouse_state.vel_x * Math.cos(t) - mouse_state.vel_y * Math.sin(t));
+            camera_pos[1] -= walk_speed * (mouse_state.vel_x * Math.sin(t) + mouse_state.vel_y * Math.cos(t));
+        }
+        if (mouse_state.keys == 3){
+            camera_pos[2] -= vert_speed * mouse_state.vel_y;
+        }
+    
+    }
+
+
 }
 
 
@@ -542,6 +586,7 @@ function init(){
         // set uniforms
         gl.uniform2f(gl.getUniformLocation(sim_program, 'mouse_pos'), mouse_state.x, mouse_state.y);
         gl.uniform1i(gl.getUniformLocation(sim_program, 'mouse_btns'), mouse_state.buttons);
+        gl.uniform1i(gl.getUniformLocation(sim_program, 'keys'), mouse_state.keys);
         gl.uniform2f(gl.getUniformLocation(sim_program, 'sim_res'), sim_res, sim_res);
         gl.uniform1i(gl.getUniformLocation(sim_program, 'pen_type'), pen_type_options.indexOf(pen_type_el.value));
         gl.uniform1f(gl.getUniformLocation(sim_program, 'pen_size'), document.getElementById('pen-size').value);
@@ -589,9 +634,13 @@ function init(){
         } else {
 
             // drawing 3D
-            mat4.lookAt(M_camera, [-0.25, -0.25, 2], [0.5, 0.5, 0], [0, 0, 1]);
+            // mat4.lookAt(M_camera, camera_pos, [0.5, 0.5, 0], [0, 0, 1]);
             // mat4.invert(M_camera, M_camera);
-            mat4.perspective(M_perpective, 45 * 3.14 / 180, render_width / render_height, 0.1, 10);
+            mat4.identity(M_camera);
+            mat4.rotateX(M_camera, M_camera, -camera_rot[0] * PI / 180);
+            mat4.rotateZ(M_camera, M_camera, -camera_rot[1] * PI / 180);
+            mat4.translate(M_camera, M_camera, invert_vect(camera_pos));
+            mat4.perspective(M_perpective, 45 * PI / 180, render_width / render_height, 0.01, 10);
             mat4.multiply(M_camera, M_perpective, M_camera);
             // mat4.identity(M_camera);
 
