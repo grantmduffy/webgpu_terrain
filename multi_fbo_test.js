@@ -214,9 +214,13 @@ uniform sampler2D other_t;
 uniform float pen_size;
 uniform vec2 mouse_pos;
 uniform int mouse_btns;
+uniform vec2 sim_res;
 
 in vec2 xy;
 out vec4 frag_color;
+
+#define sun_dir normalize(vec3(1., 0, 0))
+#define z_scale 0.1  // TODO: combine as uniform with 3d fs
 
 vec4 low0;
 vec4 low1;
@@ -224,6 +228,10 @@ vec4 high0;
 vec4 high1;
 vec4 mid;
 vec4 other;
+vec4 other_n;
+vec4 other_s;
+vec4 other_e;
+vec4 other_w;
 float vel_low;
 float vel_high;
 float pressure;
@@ -269,6 +277,18 @@ void main(){
         uplift = 100. * mid.w;
         elevation = other.z;
         frag_color = vec4(uplift, elevation, -uplift, 1.);
+        break;
+    case 4:  // realistic
+        other = texture(other_t, xy);
+        other_n = texture(other_t, xy + vec2(0., 1.) / sim_res);
+        other_s = texture(other_t, xy + vec2(0., -1.) / sim_res);
+        other_e = texture(other_t, xy + vec2(1., 0.) / sim_res);
+        other_w = texture(other_t, xy + vec2(-1., 0.) / sim_res);
+
+        vec3 norm = normalize(vec3(z_scale * vec2(other_e.z - other_w.z, other_n.z - other_s.z) * sim_res, 1.));
+        float sunlight = dot(norm, sun_dir);
+        frag_color = vec4(vec3((sunlight + 1.) / 2.), 1.);
+        // frag_color = vec4(norm, 1.);
         break;
     }
     if (abs(length(mouse_pos - xy) - pen_size) < 0.001){
@@ -615,6 +635,7 @@ function init(){
             gl.uniform1f(gl.getUniformLocation(render2d_program, 'pen_size'), document.getElementById('pen-size').value);
             gl.uniform2f(gl.getUniformLocation(render2d_program, 'mouse_pos'), mouse_state.x, mouse_state.y);
             gl.uniform1i(gl.getUniformLocation(render2d_program, 'mouse_btns'), mouse_state.buttons);
+            gl.uniform2f(gl.getUniformLocation(render2d_program, 'sim_res'), sim_res, sim_res);
             gl.bindFramebuffer(gl.FRAMEBUFFER, null);
             gl.clearColor(0, 0, 0, 1);
             gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
@@ -665,6 +686,7 @@ function init(){
             gl.uniform2f(gl.getUniformLocation(render3d_program, 'mouse_pos'), mouse_state.x, mouse_state.y);
             gl.uniform1i(gl.getUniformLocation(render3d_program, 'mouse_btns'), mouse_state.buttons);
             gl.uniformMatrix4fv(gl.getUniformLocation(render3d_program, 'M_camera'), gl.FALSE, M_camera);
+            gl.uniform2f(gl.getUniformLocation(render3d_program, 'sim_res'), sim_res, sim_res);
             for (var i = 0; i < textures.length; i++){
                 gl.uniform1i(gl.getUniformLocation(render3d_program, textures[i].name), i);
             }
