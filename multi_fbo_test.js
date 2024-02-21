@@ -176,6 +176,7 @@ void main(){
         case 4:  // rain
             break;
         }
+        low_1.a = 1.;
     }
     
     // clip elevation to 0-1 
@@ -397,9 +398,9 @@ out vec3 xyz;
 out vec2 xy;
 
 void main(){
-    xy = vert_pos;
-    xyz = vec3(vert_pos, low_elev);
-    gl_Position = M_camera * vec4(xyz, 0.5);
+    xy = (vert_pos + 1.) / 2.;
+    xyz = vec3(xy, low_elev);
+    gl_Position = M_camera * vec4(xyz, 1.);
 }`;
 
 let cloud_plane_fs_src = `#version 300 es
@@ -407,12 +408,18 @@ precision highp float;
 precision highp int;
 precision highp sampler2D;
 
+uniform sampler2D low0_t;
+uniform sampler2D low1_t;
+uniform sampler2D mid_t;
+
 in vec2 xy;
 in vec3 xyz;
 out vec4 frag_color;
 
 void main(){
-    frag_color = vec4(0., 1., 1., 1.);
+    vec4 mid = texture(mid_t, xy);
+    float uplift = clamp(100. * mid.w, -1., 1.);
+    frag_color = vec4(uplift, 0., -uplift, abs(uplift));
 }`;
 
 
@@ -432,8 +439,10 @@ const render_width = 640;
 const render_height = 480;
 let M_camera = new Float32Array(16);
 let M_perpective = new Float32Array(16);
-let camera_pos = [0.5, 0.5, 0.25];
-let camera_rot = [45, 0];
+// let camera_pos = [0.5, 0.5, 0.25];
+// let camera_rot = [45, 0];
+let camera_pos = [0.5, 0.5, 1];
+let camera_rot = [0, 0];
 const PI = 3.14159
 const walk_speed = 0.003;
 const look_speed = 1.;
@@ -608,7 +617,7 @@ function init(){
     ]);
     
     let loop = function(){
-
+        gl.disable(gl.BLEND);
         // sim program
         gl.useProgram(sim_program);
         gl.viewport(0, 0, sim_res, sim_res);
@@ -731,6 +740,7 @@ function init(){
 
             // draw plane clouds
             gl.useProgram(cloud_plane_program);
+            gl.enable(gl.BLEND);
             gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, tri_buffer);
             gl.vertexAttribPointer(
