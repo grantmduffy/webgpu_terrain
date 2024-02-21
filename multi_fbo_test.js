@@ -176,7 +176,7 @@ void main(){
         case 4:  // rain
             break;
         }
-        low_1.a = 1.;
+        low1_out.a = 1.;
     }
     
     // clip elevation to 0-1 
@@ -392,14 +392,15 @@ precision highp sampler2D;
 uniform mat4 M_camera;
 
 #define low_elev 0.02
+#define high_elev 0.05
 
-in vec2 vert_pos;
+in vec3 vert_pos;
 out vec3 xyz;
 out vec2 xy;
 
 void main(){
-    xy = (vert_pos + 1.) / 2.;
-    xyz = vec3(xy, low_elev);
+    xy = vert_pos.xy;
+    xyz = vec3(xy, vert_pos.z * (high_elev - low_elev) + low_elev);
     gl_Position = M_camera * vec4(xyz, 1.);
 }`;
 
@@ -420,6 +421,8 @@ void main(){
     vec4 mid = texture(mid_t, xy);
     float uplift = clamp(100. * mid.w, -1., 1.);
     frag_color = vec4(uplift, 0., -uplift, abs(uplift));
+    // frag_color = vec4(0., 1., 1., 1.);
+    // frag_color.a = 0.5;
 }`;
 
 
@@ -439,10 +442,8 @@ const render_width = 640;
 const render_height = 480;
 let M_camera = new Float32Array(16);
 let M_perpective = new Float32Array(16);
-// let camera_pos = [0.5, 0.5, 0.25];
-// let camera_rot = [45, 0];
-let camera_pos = [0.5, 0.5, 1];
-let camera_rot = [0, 0];
+let camera_pos = [0.5, 0.5, 0.25];
+let camera_rot = [45, 0];
 const PI = 3.14159
 const walk_speed = 0.003;
 const look_speed = 1.;
@@ -535,6 +536,22 @@ function get_grid_mesh(n = 512, m = 512){
     return out;
 }
 
+function get_cloud_planes(n=2){
+    let out = [];
+    for (var i = 0; i < n; i++){
+        out.push([
+            0., 0., i / (n - 1),
+            0., 1., i / (n - 1),
+            1., 1., i / (n - 1)
+        ]);
+        out.push([
+            0., 0., i / (n - 1),
+            1., 1., i / (n - 1),
+            1., 0., i / (n - 1),
+        ]);
+    }
+    return out;
+}
 
 function init(){
     canvas = document.getElementById('gl-canvas')
@@ -584,6 +601,8 @@ function init(){
     grid_mesh = get_grid_mesh(sim_res, sim_res);
     let grid_mesh_buffer = create_buffer(new Float32Array(grid_mesh.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let grid_mesh_attr_loc = gl.getAttribLocation(render3d_program, 'vert_pos');
+    cloud_planes = get_cloud_planes(2);
+    let cloud_planes_buffer = create_buffer(new Float32Array(cloud_planes.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let cloud_plane_pos_attr_loc = gl.getAttribLocation(cloud_plane_program, 'vert_pos');
 
 
@@ -741,12 +760,12 @@ function init(){
             // draw plane clouds
             gl.useProgram(cloud_plane_program);
             gl.enable(gl.BLEND);
-            gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, tri_buffer);
+            gl.bindBuffer(gl.ARRAY_BUFFER, cloud_planes_buffer);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
             gl.vertexAttribPointer(
-                cloud_plane_pos_attr_loc, 2,
+                cloud_plane_pos_attr_loc, 3,
                 gl.FLOAT, gl.FALSE,
-                2 * 4, 0
+                3 * 4, 0
             );
             gl.uniform2f(gl.getUniformLocation(cloud_plane_program, 'sim_res'), sim_res, sim_res);
             gl.uniform1i(gl.getUniformLocation(cloud_plane_program, 'view_mode'), view_mode_options.indexOf(view_mode_el.value));
@@ -758,7 +777,7 @@ function init(){
             for (var i = 0; i < textures.length; i++){
                 gl.uniform1i(gl.getUniformLocation(cloud_plane_program, textures[i].name), i);
             }
-            gl.drawElements(gl.TRIANGLES, 3 * screen_mesh[1].length, gl.UNSIGNED_SHORT, 0);
+            gl.drawArrays(gl.TRIANGLES, 0, 3 * cloud_planes.length);
         }
 
         // setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
