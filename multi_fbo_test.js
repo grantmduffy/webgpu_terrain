@@ -279,7 +279,9 @@ void main(){
         elevation = other.z;
         frag_color = vec4(uplift, elevation, -uplift, 1.);
         break;
-    case 4:  // realistic
+    case 4:  // clouds
+        frag_color = vec4(0., low1.a, high1.a, 1.);
+    case 5:  // realistic
         other = texture(other_t, xy);
         other_n = texture(other_t, xy + vec2(0., 1.) / sim_res);
         other_s = texture(other_t, xy + vec2(0., -1.) / sim_res);
@@ -397,9 +399,11 @@ uniform mat4 M_camera;
 in vec3 vert_pos;
 out vec3 xyz;
 out vec2 xy;
+out float z;
 
 void main(){
     xy = vert_pos.xy;
+    z = vert_pos.z;
     xyz = vec3(xy, vert_pos.z * (high_elev - low_elev) + low_elev);
     gl_Position = M_camera * vec4(xyz, 1.);
 }`;
@@ -411,18 +415,48 @@ precision highp sampler2D;
 
 uniform sampler2D low0_t;
 uniform sampler2D low1_t;
+uniform sampler2D high0_t;
+uniform sampler2D high1_t;
 uniform sampler2D mid_t;
+uniform sampler2D other_t;
+uniform int cloud_mode;
+uniform float cloud_density;
 
 in vec2 xy;
 in vec3 xyz;
+in float z;
 out vec4 frag_color;
 
 void main(){
+    vec4 low0 = texture(low0_t, xy);
+    vec4 low1 = texture(low1_t, xy);
+    vec4 high0 = texture(high0_t, xy);
+    vec4 high1 = texture(high1_t, xy);
     vec4 mid = texture(mid_t, xy);
+    vec4 other = texture(other_t, xy);
+
     float uplift = clamp(100. * mid.w, -1., 1.);
-    frag_color = vec4(uplift, 0., -uplift, abs(uplift));
-    // frag_color = vec4(0., 1., 1., 1.);
-    // frag_color.a = 0.5;
+    float vel_low = length(low0.xy);
+    float vel_high = length(high0.xy);
+
+    switch (cloud_mode){
+        case 0:  // velocity
+            float vel = (vel_low + (vel_high - vel_low) * z) * 0.5;
+            frag_color = vec4(0., 1., 1., vel);
+            break;
+        case 1:  // uplift
+            frag_color = vec4(uplift > 0., 0., uplift < 0., abs(uplift));
+            break;
+        case 2:  // pressure
+            float p = (low1.p + (high1.p - low1.p) * z) * 10.;
+            frag_color = vec4(p > 0., 0., p < 0., abs(p));
+            break;
+        case 3:  // realistic
+            float h = (low1.a + (high1.a - low1.a) * z) * 1.;
+            frag_color = vec4(1., 1., 1., h);
+            break;
+    }
+    frag_color.a *= cloud_density;
 }`;
 
 
@@ -448,6 +482,7 @@ const PI = 3.14159
 const walk_speed = 0.003;
 const look_speed = 1.;
 const vert_speed = 0.001;
+const n_cloud_planes = 10;
 
 function invert_vect(arr){
     let out = [];
@@ -568,6 +603,11 @@ function init(){
     for (var i = 0; i < view_mode_el.children.length; i++){
         view_mode_options.push(view_mode_el.children[i].value);
     }
+    let cloud_mode_options = [];
+    let cloud_mode_el = document.getElementById('cloud-mode');
+    for (var i = 0; i < cloud_mode_el.children.length; i++){
+        cloud_mode_options.push(cloud_mode_el.children[i].value);
+    }
     
     // compile shaders
     let sim_vs = compile_shader(sim_vs_src, gl.VERTEX_SHADER, '');
@@ -601,7 +641,7 @@ function init(){
     grid_mesh = get_grid_mesh(sim_res, sim_res);
     let grid_mesh_buffer = create_buffer(new Float32Array(grid_mesh.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let grid_mesh_attr_loc = gl.getAttribLocation(render3d_program, 'vert_pos');
-    cloud_planes = get_cloud_planes(2);
+    cloud_planes = get_cloud_planes(n_cloud_planes);
     let cloud_planes_buffer = create_buffer(new Float32Array(cloud_planes.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let cloud_plane_pos_attr_loc = gl.getAttribLocation(cloud_plane_program, 'vert_pos');
 
@@ -637,6 +677,7 @@ function init(){
     
     let loop = function(){
         gl.disable(gl.BLEND);
+        gl.enable(gl.DEPTH_TEST);
         // sim program
         gl.useProgram(sim_program);
         gl.viewport(0, 0, sim_res, sim_res);
@@ -760,6 +801,7 @@ function init(){
             // draw plane clouds
             gl.useProgram(cloud_plane_program);
             gl.enable(gl.BLEND);
+            // gl.disable(gl.DEPTH_TEST);
             gl.bindBuffer(gl.ARRAY_BUFFER, cloud_planes_buffer);
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
             gl.vertexAttribPointer(
@@ -772,8 +814,10 @@ function init(){
             gl.uniform1f(gl.getUniformLocation(cloud_plane_program, 'pen_size'), document.getElementById('pen-size').value);
             gl.uniform2f(gl.getUniformLocation(cloud_plane_program, 'mouse_pos'), mouse_state.x, mouse_state.y);
             gl.uniform1i(gl.getUniformLocation(cloud_plane_program, 'mouse_btns'), mouse_state.buttons);
+            gl.uniform1i(gl.getUniformLocation(cloud_plane_program, 'cloud_mode'), cloud_mode_options.indexOf(cloud_mode_el.value));
             gl.uniformMatrix4fv(gl.getUniformLocation(cloud_plane_program, 'M_camera'), gl.FALSE, M_camera);
             gl.uniform2f(gl.getUniformLocation(cloud_plane_program, 'sim_res'), sim_res, sim_res);
+            gl.uniform1f(gl.getUniformLocation(cloud_plane_program, 'cloud_density'), 1 / n_cloud_planes);
             for (var i = 0; i < textures.length; i++){
                 gl.uniform1i(gl.getUniformLocation(cloud_plane_program, textures[i].name), i);
             }
