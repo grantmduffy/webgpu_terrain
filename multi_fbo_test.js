@@ -392,20 +392,24 @@ precision highp int;
 precision highp sampler2D;
 
 uniform mat4 M_camera;
+uniform mat4 M_camera_inv;
+uniform float near;
+uniform float far;
 
 #define low_elev 0.02
 #define high_elev 0.05
 
 in vec3 vert_pos;
-out vec3 xyz;
-out vec2 xy;
-out float z;
+out vec4 xyz;
 
 void main(){
-    xy = vert_pos.xy;
-    z = vert_pos.z;
-    xyz = vec3(xy, vert_pos.z * (high_elev - low_elev) + low_elev);
-    gl_Position = M_camera * vec4(xyz, 1.);
+    gl_Position = vec4((vert_pos * 2. - 1.) * 0.98, 1.);
+    vec4 xyz_close = M_camera_inv * vec4(vert_pos.xy * 2. - 1., -1., 1.);
+    xyz_close /= xyz_close.w;
+    vec4 xyz_far = M_camera_inv * vec4(vert_pos.xy * 2. - 1., 1., 1.);
+    xyz_far /= xyz_far.w;
+    xyz = vert_pos.z * (xyz_far - xyz_close) + xyz_close;
+    xyz /= xyz.w;
 }`;
 
 let cloud_plane_fs_src = `#version 300 es
@@ -421,42 +425,61 @@ uniform sampler2D mid_t;
 uniform sampler2D other_t;
 uniform int cloud_mode;
 uniform float cloud_density;
+uniform mat4 M_camera_inv;
+uniform float near;
+uniform float far;
 
-in vec2 xy;
-in vec3 xyz;
-in float z;
+// in vec2 xy;
+in vec4 xyz;
 out vec4 frag_color;
 
 void main(){
-    vec4 low0 = texture(low0_t, xy);
-    vec4 low1 = texture(low1_t, xy);
-    vec4 high0 = texture(high0_t, xy);
-    vec4 high1 = texture(high1_t, xy);
-    vec4 mid = texture(mid_t, xy);
-    vec4 other = texture(other_t, xy);
+    // vec4 low0 = texture(low0_t, xy);
+    // vec4 low1 = texture(low1_t, xy);
+    // vec4 high0 = texture(high0_t, xy);
+    // vec4 high1 = texture(high1_t, xy);
+    // vec4 mid = texture(mid_t, xy);
+    // vec4 other = texture(other_t, xy);
 
-    float uplift = clamp(100. * mid.w, -1., 1.);
-    float vel_low = length(low0.xy);
-    float vel_high = length(high0.xy);
+    // float uplift = clamp(100. * mid.w, -1., 1.);
+    // float vel_low = length(low0.xy);
+    // float vel_high = length(high0.xy);
 
-    switch (cloud_mode){
-        case 0:  // velocity
-            float vel = (vel_low + (vel_high - vel_low) * z) * 0.5;
-            frag_color = vec4(0., 1., 1., vel);
-            break;
-        case 1:  // uplift
-            frag_color = vec4(uplift > 0., 0., uplift < 0., abs(uplift));
-            break;
-        case 2:  // pressure
-            float p = (low1.p + (high1.p - low1.p) * z) * 10.;
-            frag_color = vec4(p > 0., 0., p < 0., abs(p));
-            break;
-        case 3:  // realistic
-            float h = (low1.a + (high1.a - low1.a) * z) * 1.;
-            frag_color = vec4(1., 1., 1., h);
-            break;
+    // // if ((xy.x < 0.) || (xy.y < 0.) || (xy.x > 1.) || (xy.y > 1.) || (z < 0.) || (z > 1.)){
+    //     if ((xy.x < 0.) || (xy.y < 0.) || (xy.x > 1.) || (xy.y > 1.)){
+    //             discard;
+    //     }
+
+    // switch (cloud_mode){
+    //     case 0:  // velocity
+    //         float vel = (vel_low + (vel_high - vel_low) * z) * 0.5;
+    //         frag_color = vec4(0., 1., 1., vel);
+    //         break;
+    //     case 1:  // uplift
+    //         frag_color = vec4(uplift > 0., 0., uplift < 0., abs(uplift));
+    //         break;
+    //     case 2:  // pressure
+    //         float p = (low1.p + (high1.p - low1.p) * z) * 10.;
+    //         frag_color = vec4(p > 0., 0., p < 0., abs(p));
+    //         break;
+    //     case 3:  // realistic
+    //         float h = (low1.a + (high1.a - low1.a) * z) * 1.;
+    //         frag_color = vec4(1., 1., 1., h);
+    //         break;
+    // }
+    // frag_color.a *= cloud_density;
+
+    if (
+               (xyz.x < 0.) 
+            || (xyz.y < 0.) 
+            || (xyz.x > 1.) 
+            || (xyz.y > 1.)
+            || (xyz.z < 0.)
+            || (xyz.z > 1.)
+        ){
+        discard;
     }
-    frag_color.a *= cloud_density;
+    frag_color = vec4(xyz.xyz, 0.003);
 }`;
 
 
@@ -475,14 +498,19 @@ const sim_res = 512;
 const render_width = 640;
 const render_height = 480;
 let M_camera = new Float32Array(16);
-let M_perpective = new Float32Array(16);
+let M_camera_inv = new Float32Array(16);
+let M_perspective = new Float32Array(16);
 let camera_pos = [0.5, 0.5, 0.25];
 let camera_rot = [45, 0];
+// let camera_pos = [0.5, 0.5, 2];
+// let camera_rot = [0, 0];
+let near = 0.01
+let far = 2
 const PI = 3.14159
 const walk_speed = 0.003;
 const look_speed = 1.;
 const vert_speed = 0.001;
-const n_cloud_planes = 10;
+const n_cloud_planes = 200;
 
 function invert_vect(arr){
     let out = [];
@@ -575,14 +603,14 @@ function get_cloud_planes(n=2){
     let out = [];
     for (var i = 0; i < n; i++){
         out.push([
-            0., 0., i / (n - 1),
-            0., 1., i / (n - 1),
-            1., 1., i / (n - 1)
+            0., 0., 1. - i / (n - 1),
+            0., 1., 1. - i / (n - 1),
+            1., 1., 1. - i / (n - 1)
         ]);
         out.push([
-            0., 0., i / (n - 1),
-            1., 1., i / (n - 1),
-            1., 0., i / (n - 1),
+            0., 0., 1. - i / (n - 1),
+            1., 1., 1. - i / (n - 1),
+            1., 0., 1. - i / (n - 1),
         ]);
     }
     return out;
@@ -642,6 +670,18 @@ function init(){
     let grid_mesh_buffer = create_buffer(new Float32Array(grid_mesh.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let grid_mesh_attr_loc = gl.getAttribLocation(render3d_program, 'vert_pos');
     cloud_planes = get_cloud_planes(n_cloud_planes);
+    // z_depth = 0.9
+    // cloud_planes = [
+    //     [
+    //         0, 0, z_depth,
+    //         1, 0, z_depth,
+    //         1, 1, z_depth,
+    //     ], [
+    //         0, 0, z_depth,
+    //         1, 1, z_depth,
+    //         0, 1, z_depth,
+    //     ]
+    // ];
     let cloud_planes_buffer = create_buffer(new Float32Array(cloud_planes.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let cloud_plane_pos_attr_loc = gl.getAttribLocation(cloud_plane_program, 'vert_pos');
 
@@ -762,15 +802,14 @@ function init(){
 
             // drawing 3D
             // mat4.lookAt(M_camera, camera_pos, [0.5, 0.5, 0], [0, 0, 1]);
-            // mat4.invert(M_camera, M_camera);
             mat4.identity(M_camera);
             mat4.rotateX(M_camera, M_camera, -camera_rot[0] * PI / 180);
             mat4.rotateZ(M_camera, M_camera, -camera_rot[1] * PI / 180);
             mat4.translate(M_camera, M_camera, invert_vect(camera_pos));
-            mat4.perspective(M_perpective, 45 * PI / 180, render_width / render_height, 0.01, 10);
-            mat4.multiply(M_camera, M_perpective, M_camera);
-            // mat4.identity(M_camera);
-
+            mat4.perspective(M_perspective, 45 * PI / 180, render_width / render_height, near, far);
+            mat4.multiply(M_camera, M_perspective, M_camera);
+            mat4.invert(M_camera_inv, M_camera);
+            
             canvas.width = render_width;
             canvas.height = render_height;
 
@@ -816,8 +855,11 @@ function init(){
             gl.uniform1i(gl.getUniformLocation(cloud_plane_program, 'mouse_btns'), mouse_state.buttons);
             gl.uniform1i(gl.getUniformLocation(cloud_plane_program, 'cloud_mode'), cloud_mode_options.indexOf(cloud_mode_el.value));
             gl.uniformMatrix4fv(gl.getUniformLocation(cloud_plane_program, 'M_camera'), gl.FALSE, M_camera);
+            gl.uniformMatrix4fv(gl.getUniformLocation(cloud_plane_program, 'M_camera_inv'), gl.FALSE, M_camera_inv);
             gl.uniform2f(gl.getUniformLocation(cloud_plane_program, 'sim_res'), sim_res, sim_res);
             gl.uniform1f(gl.getUniformLocation(cloud_plane_program, 'cloud_density'), 1 / n_cloud_planes);
+            gl.uniform1f(gl.getUniformLocation(cloud_plane_program, 'near'), near);
+            gl.uniform1f(gl.getUniformLocation(cloud_plane_program, 'far'), far);
             for (var i = 0; i < textures.length; i++){
                 gl.uniform1i(gl.getUniformLocation(cloud_plane_program, textures[i].name), i);
             }

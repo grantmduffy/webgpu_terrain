@@ -68,7 +68,7 @@ function compile_shader(source, type, globals=global_glsl){
     gl.compileShader(shader);
     if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)){
         console.error('Failed to compile shader:', gl.getShaderInfoLog(shader));
-        return;
+        throw new Error('Failed to compile shader');
     }
     return shader;
 }
