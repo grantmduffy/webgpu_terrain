@@ -23,10 +23,32 @@ Water       | w  |  other.w
 
 */
 
-let sim_vs_src = `#version 300 es
+let common_src = `#version 300 es
 precision highp float;
 precision highp int;
 precision highp sampler2D;
+
+// simulation parameters
+#define K_pressure 0.1
+#define K_pressure_uplift 0.01
+#define K_pressure_uplift_acc 10.
+#define K_pressure_decay 0.999
+#define K_uplift_damping 0.05
+#define K_p_decay .9
+#define K_smooth 1.0
+#define K_elevation_strength 0.01
+
+#define sun_dir normalize(vec3(1., 0, 0))
+#define z_scale 0.1
+
+#define low_elev 0.02
+#define high_elev 0.12
+#define cloud_transparency 0.05
+
+
+`;
+
+let sim_vs_src = `
 
 in vec2 vert_pos;
 out vec2 xy;
@@ -38,19 +60,7 @@ void main(){
 
 `;
 
-let sim_fs_src = `#version 300 es
-precision highp float;
-precision highp int;
-precision highp sampler2D;
-
-#define K_pressure 0.1
-#define K_pressure_uplift 0.01
-#define K_pressure_uplift_acc 10.
-#define K_pressure_decay 0.999
-#define K_uplift_damping 0.05
-#define K_p_decay .9
-#define K_smooth 1.0
-#define K_elevation_strength 0.01
+let sim_fs_src = `
 
 uniform vec2 mouse_pos;
 uniform int mouse_btns;
@@ -75,7 +85,6 @@ layout(location = 2) out vec4 high0_out;
 layout(location = 3) out vec4 high1_out;
 layout(location = 4) out vec4 mid_out;
 layout(location = 5) out vec4 other_out;
-
 
 // TODO: rename all variables to correct
 void main(){
@@ -185,10 +194,7 @@ void main(){
 
 `;
 
-let render2d_vs_src = `#version 300 es
-precision highp float;
-precision highp int;
-precision highp sampler2D;
+let render2d_vs_src = `
 
 in vec2 vert_pos;
 out vec2 xy;
@@ -200,10 +206,7 @@ void main(){
 
 `;
 
-let render2d_fs_src = `#version 300 es
-precision highp float;
-precision highp int;
-precision highp sampler2D;
+let render2d_fs_src = `
 
 uniform int view_mode;
 uniform sampler2D low0_t;
@@ -219,9 +222,6 @@ uniform vec2 sim_res;
 
 in vec2 xy;
 out vec4 frag_color;
-
-#define sun_dir normalize(vec3(1., 0, 0))
-#define z_scale 0.1  // TODO: combine as uniform with 3d fs
 
 vec4 low0;
 vec4 low1;
@@ -301,10 +301,7 @@ void main(){
 
 `;
 
-let arrow_vs_src = `#version 300 es
-precision highp float;
-precision highp int;
-precision highp sampler2D;
+let arrow_vs_src = `
 
 uniform sampler2D low0_t;
 uniform sampler2D high0_t;
@@ -323,10 +320,7 @@ void main(){
 
 `;
 
-let arrow_fs_src = `#version 300 es
-precision highp float;
-precision highp int;
-precision highp sampler2D;
+let arrow_fs_src = `
 
 in vec2 xy;
 out vec4 frag_color;
@@ -337,15 +331,10 @@ void main(){
 
 `;
 
-let render3d_vs_src = `#version 300 es
-precision highp float;
-precision highp int;
-precision highp sampler2D;
+let render3d_vs_src = `
 
 uniform mat4 M_camera;
 uniform sampler2D other_t;
-
-#define z_scale 0.1
 
 in vec2 vert_pos;
 out vec3 xyz;
@@ -360,10 +349,7 @@ void main(){
 }
 `;
 
-let render3d_fs_src = `#version 300 es
-precision highp float;
-precision highp int;
-precision highp sampler2D;
+let render3d_fs_src = `
 
 uniform sampler2D low0_t;
 uniform sampler2D high0_t;
@@ -386,18 +372,12 @@ void main(){
 }
 `;
 
-let cloud_plane_vs_src = `#version 300 es
-precision highp float;
-precision highp int;
-precision highp sampler2D;
+let cloud_plane_vs_src = `
 
 uniform mat4 M_camera;
 uniform mat4 M_camera_inv;
 uniform float near;
 uniform float far;
-
-#define low_elev 0.02
-#define high_elev 0.05
 
 in vec3 vert_pos;
 out vec4 xyz;
@@ -412,10 +392,7 @@ void main(){
     xyz /= xyz.w;
 }`;
 
-let cloud_plane_fs_src = `#version 300 es
-precision highp float;
-precision highp int;
-precision highp sampler2D;
+let cloud_plane_fs_src = `
 
 uniform sampler2D low0_t;
 uniform sampler2D low1_t;
@@ -428,10 +405,6 @@ uniform float cloud_density;
 uniform mat4 M_camera_inv;
 uniform float near;
 uniform float far;
-
-#define low_elev 0.02
-#define high_elev 0.12
-#define cloud_transparency 0.05
 
 in vec4 xyz;
 out vec4 frag_color;
@@ -646,21 +619,21 @@ function init(){
     }
     
     // compile shaders
-    let sim_vs = compile_shader(sim_vs_src, gl.VERTEX_SHADER, '');
-    let sim_fs = compile_shader(sim_fs_src, gl.FRAGMENT_SHADER, '');
+    let sim_vs = compile_shader(common_src + sim_vs_src, gl.VERTEX_SHADER, '');
+    let sim_fs = compile_shader(common_src + sim_fs_src, gl.FRAGMENT_SHADER, '');
     let sim_program = link_program(sim_vs, sim_fs);
-    let render2d_vs = compile_shader(render2d_vs_src, gl.VERTEX_SHADER, '');
-    let render2d_fs = compile_shader(render2d_fs_src, gl.FRAGMENT_SHADER, '');
+    let render2d_vs = compile_shader(common_src + render2d_vs_src, gl.VERTEX_SHADER, '');
+    let render2d_fs = compile_shader(common_src + render2d_fs_src, gl.FRAGMENT_SHADER, '');
     let render2d_program = link_program(render2d_vs, render2d_fs);
-    let arrow_vs = compile_shader(arrow_vs_src, gl.VERTEX_SHADER, '');
-    let arrow_fs = compile_shader(arrow_fs_src, gl.FRAGMENT_SHADER, '');
+    let arrow_vs = compile_shader(common_src + arrow_vs_src, gl.VERTEX_SHADER, '');
+    let arrow_fs = compile_shader(common_src + arrow_fs_src, gl.FRAGMENT_SHADER, '');
     let arrow_program = link_program(arrow_vs, arrow_fs);
-    let render3d_vs = compile_shader(render3d_vs_src, gl.VERTEX_SHADER, '');
+    let render3d_vs = compile_shader(common_src + render3d_vs_src, gl.VERTEX_SHADER, '');
     // let render3d_fs = compile_shader(render3d_fs_src, gl.FRAGMENT_SHADER, '');
-    let render3d_fs = compile_shader(render2d_fs_src, gl.FRAGMENT_SHADER, '');
+    let render3d_fs = compile_shader(common_src + render2d_fs_src, gl.FRAGMENT_SHADER, '');
     let render3d_program = link_program(render3d_vs, render3d_fs);
-    let cloud_plane_vs = compile_shader(cloud_plane_vs_src, gl.VERTEX_SHADER, '');
-    let cloud_plane_fs = compile_shader(cloud_plane_fs_src, gl.FRAGMENT_SHADER, '');
+    let cloud_plane_vs = compile_shader(common_src + cloud_plane_vs_src, gl.VERTEX_SHADER, '');
+    let cloud_plane_fs = compile_shader(common_src + cloud_plane_fs_src, gl.FRAGMENT_SHADER, '');
     let cloud_plane_program = link_program(cloud_plane_vs, cloud_plane_fs);
 
     // setup buffers
