@@ -429,17 +429,21 @@ uniform mat4 M_camera_inv;
 uniform float near;
 uniform float far;
 
-// in vec2 xy;
+#define low_elev 0.02
+#define high_elev 0.12
+#define cloud_transparency 0.05
+
 in vec4 xyz;
 out vec4 frag_color;
 
 void main(){
-    // vec4 low0 = texture(low0_t, xy);
-    // vec4 low1 = texture(low1_t, xy);
-    // vec4 high0 = texture(high0_t, xy);
-    // vec4 high1 = texture(high1_t, xy);
-    // vec4 mid = texture(mid_t, xy);
-    // vec4 other = texture(other_t, xy);
+    vec2 xy = xyz.xy;
+    vec4 low0 = texture(low0_t, xy);
+    vec4 low1 = texture(low1_t, xy);
+    vec4 high0 = texture(high0_t, xy);
+    vec4 high1 = texture(high1_t, xy);
+    vec4 mid = texture(mid_t, xy);
+    vec4 other = texture(other_t, xy);
 
     // float uplift = clamp(100. * mid.w, -1., 1.);
     // float vel_low = length(low0.xy);
@@ -474,12 +478,16 @@ void main(){
             || (xyz.y < 0.) 
             || (xyz.x > 1.) 
             || (xyz.y > 1.)
-            || (xyz.z < 0.)
-            || (xyz.z > 1.)
+            || (xyz.z < low_elev)
+            || (xyz.z > high_elev)
         ){
         discard;
     }
-    frag_color = vec4(xyz.xyz, 0.003);
+    float low_cloud = low1.a;
+    float high_cloud = high1.a;
+    float a = (xyz.z - low_elev) / (high_elev - low_elev);
+    frag_color = vec4(vec3(0.), cloud_transparency * (a * (high_cloud - low_cloud) + low_cloud));
+
 }`;
 
 
@@ -510,7 +518,7 @@ const PI = 3.14159
 const walk_speed = 0.003;
 const look_speed = 1.;
 const vert_speed = 0.001;
-const n_cloud_planes = 200;
+const n_cloud_planes = 400;
 
 function invert_vect(arr){
     let out = [];
