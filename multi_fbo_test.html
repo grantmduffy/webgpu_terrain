@@ -60,7 +60,7 @@ label, input {
           <option value="all-vel">all velocity</option>
           <option value="low-vel">low velocity</option>
           <option value="high-vel">high velocity</option>
-          <option value="elev">elevation</option>
+          <option value="elev" selected>elevation</option>
           <option value="rain">rain</option>
         </select>
         <label for="view-mode">view mode</label>
@@ -70,7 +70,7 @@ label, input {
           <option value="uplift">uplift</option>
           <option value="elevation">elevation</option>
           <option value="clouds">clouds</option>
-          <option value="realistic">realistic</option>
+          <option value="realistic" selected>realistic</option>
         </select>
         <label for="cloud-mode">cloud mode</label>
         <select name="cloud-mode" id="cloud-mode">
@@ -85,7 +85,7 @@ label, input {
           <option value="3d" selected>3D render</option>
         </select>
         <label for="pen-size" class="column">pen size</label>
-        <input class="column" type="range" id="pen-size" min="0" max="0.2" step="0.001" value="0.01">
+        <input class="column" type="range" id="pen-size" min="0" max="0.2" step="0.001" value="0.1">
         <label for="pen-strength" class="column">pen strength</label>
         <input class="column" type="range" id="pen-strength" min="0" max="2" step="0.001" value="1">
       </div>

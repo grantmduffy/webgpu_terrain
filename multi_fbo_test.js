@@ -43,8 +43,26 @@ precision highp sampler2D;
 
 #define low_elev 0.02
 #define high_elev 0.12
+#define max_elev 0.3
 #define cloud_transparency 0.05
 
+#define cloud_threshold 0.6
+#define cloud_sharpness 2.
+
+
+float interp_elev(float z, float v_ground, float v_low, float v_high, float v_max){
+    if (z < low_elev){  // below low clouds
+        return z * (v_low - v_ground) / low_elev + v_ground;
+    } else if (z < high_elev){  // between low and high clouds
+        return (z - low_elev) * (v_high - v_low) / (high_elev - low_elev) + v_low;
+    } else {  // above high clouds
+        return (z - high_elev) * (v_max - v_high) / (max_elev - high_elev) + v_high;
+    }
+}
+
+float get_cloud_density(float h){
+    return clamp((h - cloud_threshold) * cloud_sharpness, 0., 1.);
+}
 
 `;
 
@@ -383,13 +401,14 @@ in vec3 vert_pos;
 out vec4 xyz;
 
 void main(){
-    gl_Position = vec4((vert_pos * 2. - 1.) * 0.98, 1.);
+    // gl_Position = vec4((vert_pos * 2. - 1.) * 0.98, 1.);
     vec4 xyz_close = M_camera_inv * vec4(vert_pos.xy * 2. - 1., -1., 1.);
     xyz_close /= xyz_close.w;
     vec4 xyz_far = M_camera_inv * vec4(vert_pos.xy * 2. - 1., 1., 1.);
     xyz_far /= xyz_far.w;
     xyz = vert_pos.z * (xyz_far - xyz_close) + xyz_close;
     xyz /= xyz.w;
+    gl_Position = M_camera * xyz;
 }`;
 
 let cloud_plane_fs_src = `
@@ -418,48 +437,21 @@ void main(){
     vec4 mid = texture(mid_t, xy);
     vec4 other = texture(other_t, xy);
 
-    // float uplift = clamp(100. * mid.w, -1., 1.);
-    // float vel_low = length(low0.xy);
-    // float vel_high = length(high0.xy);
-
-    // // if ((xy.x < 0.) || (xy.y < 0.) || (xy.x > 1.) || (xy.y > 1.) || (z < 0.) || (z > 1.)){
-    //     if ((xy.x < 0.) || (xy.y < 0.) || (xy.x > 1.) || (xy.y > 1.)){
-    //             discard;
-    //     }
-
-    // switch (cloud_mode){
-    //     case 0:  // velocity
-    //         float vel = (vel_low + (vel_high - vel_low) * z) * 0.5;
-    //         frag_color = vec4(0., 1., 1., vel);
-    //         break;
-    //     case 1:  // uplift
-    //         frag_color = vec4(uplift > 0., 0., uplift < 0., abs(uplift));
-    //         break;
-    //     case 2:  // pressure
-    //         float p = (low1.p + (high1.p - low1.p) * z) * 10.;
-    //         frag_color = vec4(p > 0., 0., p < 0., abs(p));
-    //         break;
-    //     case 3:  // realistic
-    //         float h = (low1.a + (high1.a - low1.a) * z) * 1.;
-    //         frag_color = vec4(1., 1., 1., h);
-    //         break;
-    // }
-    // frag_color.a *= cloud_density;
-
     if (
                (xyz.x < 0.) 
             || (xyz.y < 0.) 
             || (xyz.x > 1.) 
             || (xyz.y > 1.)
-            || (xyz.z < low_elev)
-            || (xyz.z > high_elev)
+            || (xyz.z < 0.)
+            || (xyz.z > max_elev)
         ){
         discard;
     }
     float low_cloud = low1.a;
     float high_cloud = high1.a;
-    float a = (xyz.z - low_elev) / (high_elev - low_elev);
-    frag_color = vec4(vec3(0.), cloud_transparency * (a * (high_cloud - low_cloud) + low_cloud));
+    float h = interp_elev(xyz.z, 0., low_cloud, high_cloud, 0.);
+    float c = get_cloud_density(h);  //vec3(0.8 * xyz.z / max_elev + 0.2) *
+    frag_color = vec4( vec3(1. - c), cloud_density * c);
 
 }`;
 
@@ -600,6 +592,9 @@ function get_cloud_planes(n=2){
 function init(){
     canvas = document.getElementById('gl-canvas')
     setup_gl(canvas);
+    gl.blendEquation(gl.FUNC_ADD);
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE);
+    
     [width, height] = [canvas.width, canvas.height];
     let pen_type_options = [];
     let pen_type_el = document.getElementById('pen-type');
@@ -838,7 +833,7 @@ function init(){
             gl.uniformMatrix4fv(gl.getUniformLocation(cloud_plane_program, 'M_camera'), gl.FALSE, M_camera);
             gl.uniformMatrix4fv(gl.getUniformLocation(cloud_plane_program, 'M_camera_inv'), gl.FALSE, M_camera_inv);
             gl.uniform2f(gl.getUniformLocation(cloud_plane_program, 'sim_res'), sim_res, sim_res);
-            gl.uniform1f(gl.getUniformLocation(cloud_plane_program, 'cloud_density'), 1 / n_cloud_planes);
+            gl.uniform1f(gl.getUniformLocation(cloud_plane_program, 'cloud_density'), 200 / n_cloud_planes);
             gl.uniform1f(gl.getUniformLocation(cloud_plane_program, 'near'), near);
             gl.uniform1f(gl.getUniformLocation(cloud_plane_program, 'far'), far);
             for (var i = 0; i < textures.length; i++){
