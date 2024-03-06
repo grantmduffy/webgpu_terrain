@@ -316,11 +316,18 @@ void main(){
         other_s = texture(other_t, xy + vec2(0., -1.) / sim_res);
         other_e = texture(other_t, xy + vec2(1., 0.) / sim_res);
         other_w = texture(other_t, xy + vec2(-1., 0.) / sim_res);
+        // low1 = texture(low1_t, xy + low_elev * sun_dir.xy / sun_dir.z);
+        // high1 = texture(high1_t, xy + high_elev * sun_dir.xy / sun_dir.z);
+        low1 = texture(low1_t, xy);
+        high1 = texture(high1_t, xy);
 
-        vec3 norm = normalize(vec3(z_scale * vec2(other_w.z - other_e.z, other_s.z - other_n.z) * sim_res, 1.));
+        float low_cloud = get_cloud_density(low1.a);
+        float high_cloud = get_cloud_density(high1.a);
+
         vec4 sun_coord = M_sun * vec4(xyz, 1.);
         light = texture(light_t, sun_coord.xy / 2. + 0.5);
-        float sunlight = sun_coord.z - light.z > 0.001 ? 0. : dot(norm, sun_dir);
+        vec3 norm = normalize(vec3(z_scale * vec2(other_w.z - other_e.z, other_s.z - other_n.z) * sim_res, 1.));
+        float sunlight = sun_coord.z - light.z > 0.001 ? 0. : dot(norm, sun_dir) * (1. - low_cloud) * (1. - high_cloud);
         frag_color = vec4(vec3(sunlight), 1.);
         break;
     }
@@ -534,7 +541,7 @@ const vert_speed = 0.001;
 const n_cloud_planes = 400;
 const z_max = 0.11
 const z_min = -0.01
-let sun_dir = [2, 2, 1];
+let sun_dir = [1, 1, 1];
 norm_vect(sun_dir);
 
 
