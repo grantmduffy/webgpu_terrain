@@ -11,15 +11,20 @@ high2  | u | v | - | - |  2  |
 high3  | - | T | P | H |  3  |
 mid    | - | - | - | U |  4  |
 other  | s | - | z | w |  5  |
+light  | g | l | h | d |  6  |
 
-Velocity    | uv |  low0/high0.xy
-Temperature | T  |  low1/high1.t
-Humidity    | H  |  low1/high1.a
-Pressure    | P  |  low1/high1.p
-Uplift      | U  |  mid.w
-Sediment    | s  |  other.s
-Elevation   | z  |  other.z
-Water       | w  |  other.w
+Velocity         | uv |  low0/high0.xy
+Temperature      | T  |  low1/high1.t
+Humidity         | H  |  low1/high1.a
+Pressure         | P  |  low1/high1.p
+Uplift           | U  |  mid.w
+Sediment         | s  |  other.s
+Elevation        | z  |  other.z
+Water            | w  |  other.w
+Surface Light    | g  | light.x
+Low Cloud Light  | l  | light.y
+High Cloud Light | h  | light.z
+Surface Depth    | d  | light.w
 
 */
 
@@ -38,7 +43,6 @@ precision highp sampler2D;
 #define K_smooth 1.0
 #define K_elevation_strength 0.01
 
-#define sun_dir normalize(vec3(1., 0, 0))
 #define z_scale 0.1
 
 #define low_elev 0.02
@@ -216,10 +220,12 @@ let render2d_vs_src = `
 
 in vec2 vert_pos;
 out vec2 xy;
+out vec3 xyz;
 
 void main(){
     gl_Position = vec4(vert_pos, .99, 1.);
     xy = vert_pos * 0.5 + 0.5;
+    xyz = vec3(xy, 0.);
 }
 
 `;
@@ -233,12 +239,16 @@ uniform sampler2D high0_t;
 uniform sampler2D high1_t;
 uniform sampler2D mid_t;
 uniform sampler2D other_t;
+uniform sampler2D light_t;
 uniform float pen_size;
 uniform vec2 mouse_pos;
 uniform int mouse_btns;
 uniform vec2 sim_res;
+uniform vec3 sun_dir;
+uniform mat4 M_sun;
 
 in vec2 xy;
+in vec3 xyz;
 out vec4 frag_color;
 
 vec4 low0;
@@ -251,6 +261,7 @@ vec4 other_n;
 vec4 other_s;
 vec4 other_e;
 vec4 other_w;
+vec4 light;
 float vel_low;
 float vel_high;
 float pressure;
@@ -306,10 +317,11 @@ void main(){
         other_e = texture(other_t, xy + vec2(1., 0.) / sim_res);
         other_w = texture(other_t, xy + vec2(-1., 0.) / sim_res);
 
-        vec3 norm = normalize(vec3(z_scale * vec2(other_e.z - other_w.z, other_n.z - other_s.z) * sim_res, 1.));
-        float sunlight = dot(norm, sun_dir);
-        frag_color = vec4(vec3((sunlight + 1.) / 2.), 1.);
-        // frag_color = vec4(norm, 1.);
+        vec3 norm = normalize(vec3(z_scale * vec2(other_w.z - other_e.z, other_s.z - other_n.z) * sim_res, 1.));
+        vec4 sun_coord = M_sun * vec4(xyz, 1.);
+        light = texture(light_t, sun_coord.xy / 2. + 0.5);
+        float sunlight = sun_coord.z - light.z > 0.001 ? 0. : dot(norm, sun_dir);
+        frag_color = vec4(vec3(sunlight), 1.);
         break;
     }
     if (abs(length(mouse_pos - xy) - pen_size) < 0.001){
@@ -455,6 +467,41 @@ void main(){
 
 }`;
 
+let sun_vs_src = `
+
+uniform mat4 M_sun;
+uniform sampler2D other_t;
+
+in vec2 vert_pos;
+out vec4 xyz;
+out vec4 sun_coord;
+
+void main(){
+    float elevation = texture(other_t, vert_pos).z * z_scale;
+    xyz = vec4(vert_pos, elevation, 1.);
+    sun_coord = M_sun * xyz;
+    gl_Position = sun_coord;
+}
+
+`;
+
+let sun_fs_src = `
+
+uniform sampler2D low1_t;
+uniform sampler2D high1_t;
+uniform vec3 sun_dir;
+
+// out vec4 frag_color;
+in vec4 xyz;
+in vec4 sun_coord;
+layout(location = 0) out vec4 light_out;
+
+void main(){
+    vec2 sun_uv = sun_coord.xy / 2. + 0.5;
+    light_out = vec4(sun_uv, sun_coord.z, 1.);
+}
+`;
+
 
 var [width, height] = [1, 1];
 let mouse_state = {
@@ -473,6 +520,7 @@ const render_height = 480;
 let M_camera = new Float32Array(16);
 let M_camera_inv = new Float32Array(16);
 let M_perspective = new Float32Array(16);
+let M_sun = new Float32Array(16);
 let camera_pos = [0.5, 0.5, 0.25];
 let camera_rot = [45, 0];
 // let camera_pos = [0.5, 0.5, 2];
@@ -484,6 +532,11 @@ const walk_speed = 0.003;
 const look_speed = 1.;
 const vert_speed = 0.001;
 const n_cloud_planes = 400;
+const z_max = 0.11
+const z_min = -0.01
+let sun_dir = [2, 2, 1];
+norm_vect(sun_dir);
+
 
 function invert_vect(arr){
     let out = [];
@@ -491,6 +544,18 @@ function invert_vect(arr){
         out.push(-arr[i]);
     }
     return out;
+}
+
+
+function norm_vect(arr){
+    var mag = 0
+    for (var i = 0; i < arr.length; i++){
+        mag += arr[i] ** 2;
+    }
+    mag = mag ** 0.5;
+    for (var i = 0; i < arr.length; i++){
+        arr[i] = arr[i] / mag;
+    }
 }
 
 
@@ -572,6 +637,7 @@ function get_grid_mesh(n = 512, m = 512){
     return out;
 }
 
+
 function get_cloud_planes(n=2){
     let out = [];
     for (var i = 0; i < n; i++){
@@ -588,6 +654,36 @@ function get_cloud_planes(n=2){
     }
     return out;
 }
+
+
+function set_sun_matrix(M){
+
+    // row 0
+    M[0] = 2;
+    M[1] = 0;
+    M[2] = 0;
+    M[3] = 0;
+
+    // row 1
+    M[4] = 0;
+    M[5] = 2;
+    M[6] = 0;
+    M[7] = 0;
+
+    // row 2
+    M[8] = -sun_dir[0] / sun_dir[2];
+    M[9] = -sun_dir[1] / sun_dir[2];
+    M[10] = -2 / (z_max - z_min);
+    M[11] = 0;
+
+    // row 3
+    M[12] = -1
+    M[13] = -1
+    M[14] = 1 + z_min / (z_max - z_min);
+    M[15] = 1
+
+}
+
 
 function init(){
     canvas = document.getElementById('gl-canvas')
@@ -630,6 +726,9 @@ function init(){
     let cloud_plane_vs = compile_shader(common_src + cloud_plane_vs_src, gl.VERTEX_SHADER, '');
     let cloud_plane_fs = compile_shader(common_src + cloud_plane_fs_src, gl.FRAGMENT_SHADER, '');
     let cloud_plane_program = link_program(cloud_plane_vs, cloud_plane_fs);
+    let sun_vs = compile_shader(common_src + sun_vs_src, gl.VERTEX_SHADER, '');
+    let sun_fs = compile_shader(common_src + sun_fs_src, gl.FRAGMENT_SHADER, '');
+    let sun_program = link_program(sun_vs, sun_fs);
 
     // setup buffers
     let vertex_buffer = create_buffer(new Float32Array(screen_mesh[0].flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
@@ -646,18 +745,6 @@ function init(){
     let grid_mesh_buffer = create_buffer(new Float32Array(grid_mesh.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let grid_mesh_attr_loc = gl.getAttribLocation(render3d_program, 'vert_pos');
     cloud_planes = get_cloud_planes(n_cloud_planes);
-    // z_depth = 0.9
-    // cloud_planes = [
-    //     [
-    //         0, 0, z_depth,
-    //         1, 0, z_depth,
-    //         1, 1, z_depth,
-    //     ], [
-    //         0, 0, z_depth,
-    //         1, 1, z_depth,
-    //         0, 1, z_depth,
-    //     ]
-    // ];
     let cloud_planes_buffer = create_buffer(new Float32Array(cloud_planes.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let cloud_plane_pos_attr_loc = gl.getAttribLocation(cloud_plane_program, 'vert_pos');
 
@@ -675,7 +762,7 @@ function init(){
             'out_tex': create_texture(sim_res, sim_res, tex_defaults[i], i, 'tile')
         });
     }
-
+    
     // setup fbo
     gl.bindRenderbuffer(gl.RENDERBUFFER, sim_depthbuffer);
     gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, sim_res, sim_res);
@@ -691,6 +778,22 @@ function init(){
         // gl.COLOR_ATTACHMENT7,
     ]);
     
+    let sun_fbo = gl.createFramebuffer();
+    let sun_depthbuffer = gl.createRenderbuffer();
+    let sun_tex = create_texture(sim_res, sim_res, [1, 1, 1, 1], 6, 'tile');
+    gl.bindRenderbuffer(gl.RENDERBUFFER, sun_depthbuffer);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, sim_res, sim_res);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, sun_fbo);
+    gl.drawBuffers([
+        gl.COLOR_ATTACHMENT0
+    ]);
+    gl.framebufferTexture2D(
+        gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
+        gl.TEXTURE_2D, sun_tex, 0
+    );
+    gl.activeTexture(gl.TEXTURE0 + 6);
+    gl.bindTexture(gl.TEXTURE_2D, sun_tex);
+
     let loop = function(){
         gl.disable(gl.BLEND);
         gl.enable(gl.DEPTH_TEST);
@@ -740,7 +843,36 @@ function init(){
         gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
         gl.drawElements(gl.TRIANGLES, 3 * screen_mesh[1].length, gl.UNSIGNED_SHORT, 0);
 
-        if (render_mode_el.value != '3d'){
+        
+        // draw sun layer
+        set_sun_matrix(M_sun);
+        // mat4.identity(M_sun);
+        canvas.width = sim_res;
+        canvas.height = sim_res;
+
+        gl.useProgram(sun_program);
+        for (var i = 0; i < textures.length; i++){
+            gl.uniform1i(gl.getUniformLocation(sun_program, textures[i].name), i);
+        }
+        gl.uniformMatrix4fv(gl.getUniformLocation(sun_program, 'M_sun'), gl.FALSE, M_sun);
+        gl.uniform3fv(gl.getUniformLocation(sun_program, 'sun_dir'), sun_dir)
+        if (render_mode_el.value != 'sun'){
+            gl.bindFramebuffer(gl.FRAMEBUFFER, sun_fbo);
+        } else {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        }
+        gl.bindBuffer(gl.ARRAY_BUFFER, grid_mesh_buffer);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+        gl.vertexAttribPointer(
+            grid_mesh_attr_loc, 2,
+            gl.FLOAT, gl.FALSE,
+            2 * 4, 0
+        );
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
+        gl.drawArrays(gl.TRIANGLES, 0, grid_mesh.length * 3);
+
+        if (render_mode_el.value == '2d'){
 
             canvas.width = sim_res;
             canvas.height = sim_res;
@@ -756,6 +888,9 @@ function init(){
             gl.uniform2f(gl.getUniformLocation(render2d_program, 'mouse_pos'), mouse_state.x, mouse_state.y);
             gl.uniform1i(gl.getUniformLocation(render2d_program, 'mouse_btns'), mouse_state.buttons);
             gl.uniform2f(gl.getUniformLocation(render2d_program, 'sim_res'), sim_res, sim_res);
+            gl.uniform3fv(gl.getUniformLocation(render2d_program, 'sun_dir'), sun_dir)
+            gl.uniform1i(gl.getUniformLocation(render2d_program, 'light_t'), 6);
+            gl.uniformMatrix4fv(gl.getUniformLocation(render2d_program, 'M_sun'), gl.FALSE, M_sun);
             gl.bindFramebuffer(gl.FRAMEBUFFER, null);
             gl.clearColor(0, 0, 0, 1);
             gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
@@ -774,7 +909,7 @@ function init(){
                 gl.uniform1i(gl.getUniformLocation(arrow_program, textures[i].name), i);
             }
             gl.drawArrays(gl.LINES, 0, arrows.length * 2);
-        } else {
+        } else if (render_mode_el.value == '3d'){
 
             // drawing 3D
             // mat4.lookAt(M_camera, camera_pos, [0.5, 0.5, 0], [0, 0, 1]);
@@ -806,6 +941,9 @@ function init(){
             gl.uniform1i(gl.getUniformLocation(render3d_program, 'mouse_btns'), mouse_state.buttons);
             gl.uniformMatrix4fv(gl.getUniformLocation(render3d_program, 'M_camera'), gl.FALSE, M_camera);
             gl.uniform2f(gl.getUniformLocation(render3d_program, 'sim_res'), sim_res, sim_res);
+            gl.uniform3fv(gl.getUniformLocation(render3d_program, 'sun_dir'), sun_dir)
+            gl.uniform1i(gl.getUniformLocation(render3d_program, 'light_t'), 6);
+            gl.uniformMatrix4fv(gl.getUniformLocation(render3d_program, 'M_sun'), gl.FALSE, M_sun);
             for (var i = 0; i < textures.length; i++){
                 gl.uniform1i(gl.getUniformLocation(render3d_program, textures[i].name), i);
             }
@@ -840,6 +978,9 @@ function init(){
                 gl.uniform1i(gl.getUniformLocation(cloud_plane_program, textures[i].name), i);
             }
             gl.drawArrays(gl.TRIANGLES, 0, 3 * cloud_planes.length);
+        } else if (render_mode_el.value == 'sun'){
+            
+
         }
 
         // setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
