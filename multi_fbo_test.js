@@ -327,7 +327,8 @@ void main(){
         vec4 sun_coord = M_sun * vec4(xyz, 1.);
         light = texture(light_t, sun_coord.xy / 2. + 0.5);
         vec3 norm = normalize(vec3(z_scale * vec2(other_w.z - other_e.z, other_s.z - other_n.z) * sim_res, 1.));
-        float sunlight = sun_coord.z - light.z > 0.001 ? 0. : dot(norm, sun_dir) * (1. - low_cloud) * (1. - high_cloud);
+        float sunlight = sun_coord.z - light.a > 0.001 ? 0. : dot(norm, sun_dir) * light.x;
+        sunlight = dot(norm, sun_dir);
         frag_color = vec4(vec3(sunlight), 1.);
         break;
     }
@@ -438,9 +439,11 @@ uniform sampler2D high0_t;
 uniform sampler2D high1_t;
 uniform sampler2D mid_t;
 uniform sampler2D other_t;
+uniform sampler2D light_t;
 uniform int cloud_mode;
 uniform float cloud_density;
 uniform mat4 M_camera_inv;
+uniform mat4 M_sun;
 uniform float near;
 uniform float far;
 
@@ -449,13 +452,6 @@ out vec4 frag_color;
 
 void main(){
     vec2 xy = xyz.xy;
-    vec4 low0 = texture(low0_t, xy);
-    vec4 low1 = texture(low1_t, xy);
-    vec4 high0 = texture(high0_t, xy);
-    vec4 high1 = texture(high1_t, xy);
-    vec4 mid = texture(mid_t, xy);
-    vec4 other = texture(other_t, xy);
-
     if (
                (xyz.x < 0.) 
             || (xyz.y < 0.) 
@@ -466,11 +462,23 @@ void main(){
         ){
         discard;
     }
-    float low_cloud = low1.a;
-    float high_cloud = high1.a;
-    float h = interp_elev(xyz.z, 0., low_cloud, high_cloud, 0.);
-    float c = get_cloud_density(h);  //vec3(0.8 * xyz.z / max_elev + 0.2) *
-    frag_color = vec4( vec3(1. - c), cloud_density * c);
+    vec4 sun_coord = M_sun * xyz;
+    vec4 light = texture(light_t, sun_coord.xy / 2. + 0.5);
+    float brightness = clamp(
+        (xyz.z - light.y) * (1. - light.x) / (light.z - light.y) + light.x, 
+        light.x, 1.
+    );
+    float low_cloud = texture(low1_t, xyz.xy).a;
+    float high_cloud = texture(high1_t, xyz.xy).a;
+    float cloud = get_cloud_density(interp_elev(
+        xyz.z, 0., low_cloud, high_cloud, 0.
+    ));
+    frag_color = vec4(
+        float(xyz.z < light.y),
+        float(xyz.z < light.z),
+        cloud,
+        float((xyz.z < light.y) || (xyz.z < light.z) || (cloud > 0.)) * 0.1
+    );
 
 }`;
 
@@ -497,15 +505,34 @@ let sun_fs_src = `
 uniform sampler2D low1_t;
 uniform sampler2D high1_t;
 uniform vec3 sun_dir;
+uniform mat4 M_sun;
+
+#define n_light_samples 80
+#define cloud_start 0.1
+#define cloud_density_sun 1.
 
 // out vec4 frag_color;
-in vec4 xyz;
+in vec4 xyz;  // surface point
 in vec4 sun_coord;
 layout(location = 0) out vec4 light_out;
 
+float sample_density(float z){
+    vec2 pos = xyz.xy + (z - xyz.z) * sun_dir.xy / sun_dir.z;
+    return get_cloud_density(interp_elev(
+        z, 0., 
+        texture(low1_t, pos).a, 
+        texture(high1_t, pos).a, 
+        0.
+    )) * cloud_density_sun;
+}
+
 void main(){
-    vec2 sun_uv = sun_coord.xy / 2. + 0.5;
-    light_out = vec4(sun_uv, sun_coord.z, 1.);
+    float low_cloud = get_cloud_density(texture(low1_t, xyz.xy + 0.5 * (low_elev - xyz.z) * sun_dir.xy / sun_dir.z).a);
+    float high_cloud = get_cloud_density(texture(high1_t, xyz.xy + 0.5 * (high_elev - xyz.z) * sun_dir.xy / sun_dir.z).a);
+    light_out = vec4(0.);
+    light_out.y = float(low_cloud > 0.) * low_elev;
+    light_out.z = float(high_cloud > 0.) * high_elev;
+    light_out.a = sun_coord.z;
 }
 `;
 
@@ -539,9 +566,9 @@ const walk_speed = 0.003;
 const look_speed = 1.;
 const vert_speed = 0.001;
 const n_cloud_planes = 400;
-const z_max = 0.11
+const z_max = 0.3  // max_elev
 const z_min = -0.01
-let sun_dir = [1, 1, 1];
+let sun_dir = [3, 3, 1];
 norm_vect(sun_dir);
 
 
@@ -686,7 +713,7 @@ function set_sun_matrix(M){
     // row 3
     M[12] = -1
     M[13] = -1
-    M[14] = 1 + z_min / (z_max - z_min);
+    M[14] = (z_max + z_min) / (z_max - z_min);
     M[15] = 1
 
 }
@@ -954,7 +981,7 @@ function init(){
             for (var i = 0; i < textures.length; i++){
                 gl.uniform1i(gl.getUniformLocation(render3d_program, textures[i].name), i);
             }
-            gl.clearColor(0, 0, 0, 1);
+            gl.clearColor(53/255, 81/255, 92/255, 1);
             gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
             gl.drawArrays(gl.TRIANGLES, 0, grid_mesh.length * 3);
 
@@ -977,6 +1004,7 @@ function init(){
             gl.uniform1i(gl.getUniformLocation(cloud_plane_program, 'cloud_mode'), cloud_mode_options.indexOf(cloud_mode_el.value));
             gl.uniformMatrix4fv(gl.getUniformLocation(cloud_plane_program, 'M_camera'), gl.FALSE, M_camera);
             gl.uniformMatrix4fv(gl.getUniformLocation(cloud_plane_program, 'M_camera_inv'), gl.FALSE, M_camera_inv);
+            gl.uniformMatrix4fv(gl.getUniformLocation(cloud_plane_program, 'M_sun'), gl.FALSE, M_sun);
             gl.uniform2f(gl.getUniformLocation(cloud_plane_program, 'sim_res'), sim_res, sim_res);
             gl.uniform1f(gl.getUniformLocation(cloud_plane_program, 'cloud_density'), 200 / n_cloud_planes);
             gl.uniform1f(gl.getUniformLocation(cloud_plane_program, 'near'), near);
@@ -984,6 +1012,7 @@ function init(){
             for (var i = 0; i < textures.length; i++){
                 gl.uniform1i(gl.getUniformLocation(cloud_plane_program, textures[i].name), i);
             }
+            gl.uniform1i(gl.getUniformLocation(cloud_plane_program, 'light_t'), 6);
             gl.drawArrays(gl.TRIANGLES, 0, 3 * cloud_planes.length);
         } else if (render_mode_el.value == 'sun'){
             
