@@ -51,7 +51,7 @@ precision highp sampler2D;
 #define cloud_transparency 0.05
 
 #define cloud_threshold 0.6
-#define cloud_sharpness 2.
+#define cloud_sharpness 1.5
 
 
 float interp_elev(float z, float v_ground, float v_low, float v_high, float v_max){
@@ -316,19 +316,11 @@ void main(){
         other_s = texture(other_t, xy + vec2(0., -1.) / sim_res);
         other_e = texture(other_t, xy + vec2(1., 0.) / sim_res);
         other_w = texture(other_t, xy + vec2(-1., 0.) / sim_res);
-        // low1 = texture(low1_t, xy + low_elev * sun_dir.xy / sun_dir.z);
-        // high1 = texture(high1_t, xy + high_elev * sun_dir.xy / sun_dir.z);
-        low1 = texture(low1_t, xy);
-        high1 = texture(high1_t, xy);
-
-        float low_cloud = get_cloud_density(low1.a);
-        float high_cloud = get_cloud_density(high1.a);
-
         vec4 sun_coord = M_sun * vec4(xyz, 1.);
         light = texture(light_t, sun_coord.xy / 2. + 0.5);
         vec3 norm = normalize(vec3(z_scale * vec2(other_w.z - other_e.z, other_s.z - other_n.z) * sim_res, 1.));
         float sunlight = sun_coord.z - light.a > 0.001 ? 0. : dot(norm, sun_dir) * light.x;
-        sunlight = dot(norm, sun_dir);
+        // sunlight = dot(norm, sun_dir);
         frag_color = vec4(vec3(sunlight), 1.);
         break;
     }
@@ -464,7 +456,7 @@ void main(){
     }
     vec4 sun_coord = M_sun * xyz;
     vec4 light = texture(light_t, sun_coord.xy / 2. + 0.5);
-    float brightness = clamp(
+    float brightness = sun_coord.z > light.a ? 0. : clamp(
         (xyz.z - light.y) * (1. - light.x) / (light.z - light.y) + light.x, 
         light.x, 1.
     );
@@ -474,10 +466,8 @@ void main(){
         xyz.z, 0., low_cloud, high_cloud, 0.
     ));
     frag_color = vec4(
-        float(xyz.z < light.y),
-        float(xyz.z < light.z),
-        cloud,
-        float((xyz.z < light.y) || (xyz.z < light.z) || (cloud > 0.)) * 0.1
+        vec3(brightness),
+        cloud
     );
 
 }`;
@@ -509,30 +499,32 @@ uniform mat4 M_sun;
 
 #define n_light_samples 80
 #define cloud_start 0.1
-#define cloud_density_sun 1.
+#define cloud_density_sun 1.5
+#define cloud_end_density 0.3
 
 // out vec4 frag_color;
 in vec4 xyz;  // surface point
 in vec4 sun_coord;
 layout(location = 0) out vec4 light_out;
 
-float sample_density(float z){
-    vec2 pos = xyz.xy + (z - xyz.z) * sun_dir.xy / sun_dir.z;
-    return get_cloud_density(interp_elev(
-        z, 0., 
-        texture(low1_t, pos).a, 
-        texture(high1_t, pos).a, 
-        0.
-    )) * cloud_density_sun;
-}
-
 void main(){
-    float low_cloud = get_cloud_density(texture(low1_t, xyz.xy + 0.5 * (low_elev - xyz.z) * sun_dir.xy / sun_dir.z).a);
-    float high_cloud = get_cloud_density(texture(high1_t, xyz.xy + 0.5 * (high_elev - xyz.z) * sun_dir.xy / sun_dir.z).a);
-    light_out = vec4(0.);
-    light_out.y = float(low_cloud > 0.) * low_elev;
-    light_out.z = float(high_cloud > 0.) * high_elev;
-    light_out.a = sun_coord.z;
+
+    light_out = vec4(1., 0., 0., 0.);
+    for (int i = n_light_samples; i > 0; i--){
+        float z_sample = xyz.z + (max_elev - xyz.z) * float(i) / float(n_light_samples);
+        float low_cloud = texture(low1_t, xyz.xy + 0.5 * (z_sample - xyz.z) * sun_dir.xy / sun_dir.z).a;
+        float high_cloud = texture(high1_t, xyz.xy + 0.5 * (z_sample - xyz.z) * sun_dir.xy / sun_dir.z).a;
+        float cloud = get_cloud_density(interp_elev(
+            z_sample, 0., low_cloud, high_cloud, 0.
+        ));
+        light_out.x *= (1. - cloud_density_sun * cloud * (max_elev - xyz.z));
+        // cloud lower edge
+        light_out.y = (cloud > cloud_start) && (light_out.x > cloud_end_density) ? z_sample : light_out.y;
+        // cloud upper edge
+        light_out.z = (cloud > cloud_start) && (light_out.z == 0.) ? z_sample : light_out.z;
+    }
+
+    light_out.a = sun_coord.z;  // for shaddow mapping
 }
 `;
 
