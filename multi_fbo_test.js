@@ -53,6 +53,9 @@ precision highp sampler2D;
 #define cloud_threshold 0.6
 #define cloud_sharpness 1.5
 
+#define ambient_color vec4(30. / 255., 40. / 255., 45. / 255., 1.)
+#define sun_color     vec4(255. / 255., 255. / 255., 237. / 255., 1.)
+
 
 float interp_elev(float z, float v_ground, float v_low, float v_high, float v_max){
     if (z < low_elev){  // below low clouds
@@ -319,9 +322,8 @@ void main(){
         vec4 sun_coord = M_sun * vec4(xyz, 1.);
         light = texture(light_t, sun_coord.xy / 2. + 0.5);
         vec3 norm = normalize(vec3(z_scale * vec2(other_w.z - other_e.z, other_s.z - other_n.z) * sim_res, 1.));
-        float sunlight = sun_coord.z - light.a > 0.001 ? 0. : dot(norm, sun_dir) * light.x;
-        // sunlight = dot(norm, sun_dir);
-        frag_color = vec4(vec3(sunlight), 1.);
+        float sunlight = sun_coord.z - light.a > 0.001 ? 0. : clamp(dot(norm, sun_dir), 0., 1.) * light.x;
+        frag_color = sun_color * sunlight + ambient_color * (1. - sunlight);
         break;
     }
     if (abs(length(mouse_pos - xy) - pen_size) < 0.001){
@@ -466,7 +468,7 @@ void main(){
         xyz.z, 0., low_cloud, high_cloud, 0.
     ));
     frag_color = vec4(
-        vec3(brightness),
+        brightness * sun_color.rgb + (1. - brightness) * ambient_color.xyz,
         cloud
     );
 
@@ -973,7 +975,7 @@ function init(){
             for (var i = 0; i < textures.length; i++){
                 gl.uniform1i(gl.getUniformLocation(render3d_program, textures[i].name), i);
             }
-            gl.clearColor(53/255, 81/255, 92/255, 1);
+            gl.clearColor(191/255, 240/255, 1, 1);
             gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
             gl.drawArrays(gl.TRIANGLES, 0, grid_mesh.length * 3);
 
