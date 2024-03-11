@@ -10,7 +10,7 @@ low1   | - | T | P | H |  1  |
 high2  | u | v | - | - |  2  |
 high3  | - | T | P | H |  3  |
 mid    | - | - | - | U |  4  |
-other  | s | - | z | w |  5  |
+other  | s | T | z | w |  5  |
 light  | g | l | h | d |  6  |
 
 Velocity         | uv |  low0/high0.xy
@@ -19,12 +19,13 @@ Humidity         | H  |  low1/high1.a
 Pressure         | P  |  low1/high1.p
 Uplift           | U  |  mid.w
 Sediment         | s  |  other.s
+Surface Temp     | T  |  other.t
 Elevation        | z  |  other.z
 Water            | w  |  other.w
-Surface Light    | g  | light.x
-Low Cloud Light  | l  | light.y
-High Cloud Light | h  | light.z
-Surface Depth    | d  | light.w
+Surface Light    | g  |  light.x
+Low Cloud Light  | l  |  light.y
+High Cloud Light | h  |  light.z
+Surface Depth    | d  |  light.w
 
 */
 
@@ -44,6 +45,10 @@ precision highp sampler2D;
 #define K_p_decay .9
 #define K_smooth 1.0
 #define K_elevation_strength 0.01
+#define K_sun_absorbtion .003
+#define K_surface_air 0.1
+#define K_upper_atmosphere .95;
+#define K_low_rad 0.999;
 
 #define z_scale 0.1
 
@@ -85,6 +90,10 @@ float get_cloud_density(float h){
     return clamp((h - cloud_threshold) * cloud_sharpness, 0., 1.);
 }
 
+vec4 heatmap(float temp){
+    return vec4(temp - 0.5, temp - 1., max(0.5 - temp, temp - 2.), 1.);
+}
+
 `;
 
 let sim_vs_src = `
@@ -109,6 +118,7 @@ uniform float pen_size;
 uniform float pen_strength;
 uniform int pen_type;
 uniform vec2 pen_vel;
+uniform mat4 M_sun;
 
 uniform sampler2D low0_t;
 uniform sampler2D low1_t;
@@ -116,6 +126,7 @@ uniform sampler2D high0_t;
 uniform sampler2D high1_t;
 uniform sampler2D mid_t;
 uniform sampler2D other_t;
+uniform sampler2D light_t;
 
 in vec2 xy;
 layout(location = 0) out vec4 low0_out;
@@ -179,6 +190,7 @@ void main(){
     high1_out = texture(high1_t, xy - uv_high / sim_res) * clamp(1. - uplift, 0., 1.)
               + texture(low1_t,  xy - uv_high / sim_res) * clamp(     uplift, 0., 1.);
     mid_out = texture(mid_t, xy - (uv_low + uv_high) / sim_res);
+    other_out = texture(other_t, xy);
     
     // accumulate pressure
     low1_out.p += -uplift - div_low + dot(uv_low, terrain_gradient) * K_pressure_uplift_acc;
@@ -194,7 +206,6 @@ void main(){
     high1_out.p *= K_pressure_decay;
 
     // decend pressure
-    // TODO: add uplift
     low0_out.x += (low1_w.p - low1_e.p) * K_pressure;
     low0_out.y += (low1_s.p - low1_n.p) * K_pressure;
     high0_out.x += (high1_w.p - high1_e.p) * K_pressure;
@@ -202,7 +213,17 @@ void main(){
     mid_out.w += (low1_out.p - high1_out.p) * K_pressure_uplift;
     
     // TODO: handle elevation, water, and erosion
-    other_out = texture(other_t, xy);
+
+    // handle temperature
+    vec4 xyz = vec4(xy, other_out.z * z_scale, 1.);
+    vec4 sun_coord = M_sun * xyz;
+    vec4 light = texture(light_t, sun_coord.xy / 2. + 0.5);    
+    other_out.t += sun_coord.z - light.a > 0.001 ? 0. : K_sun_absorbtion * light.x;  // sun heats ground
+    float surface_air_heat = K_surface_air * (other_out.t - low1_out.t);  // ground heats air
+    other_out.t -= surface_air_heat;
+    low1_out.t += surface_air_heat;
+    low1_out.t *= K_low_rad;
+    high1_out.t *= K_upper_atmosphere;  // upper radiation to space
 
     vec2 pen_vect = pen_vel * pen_strength;
     if ((length(mouse_pos - xy) < pen_size) && (mouse_btns == 1) && (keys == 0)){
@@ -327,6 +348,7 @@ void main(){
         break;
     case 4:  // clouds
         frag_color = vec4(0., low1.a, high1.a, 1.);
+        break;
     case 5:  // realistic
         other = texture(other_t, xy);
         other_n = texture(other_t, xy + vec2(0., 1.) / sim_res);
@@ -337,7 +359,13 @@ void main(){
         light = texture(light_t, sun_coord.xy / 2. + 0.5 + rand2d(sun_coord.xy) / render_res);
         vec3 norm = normalize(vec3(z_scale * vec2(other_w.z - other_e.z, other_s.z - other_n.z) * sim_res, 1.));
         float sunlight = sun_coord.z - light.a > 0.001 ? 0. : clamp(dot(norm, sun_dir), 0., 1.) * light.x;
+        // float sunlight = sun_coord.z - light.a > 0.001 ? 0. : light.x;
         frag_color = (sun_color * sunlight + ambient_color * (1. - sunlight)) * ground_color;
+        break;
+    case 6:  // temp
+        other = texture(other_t, xy);
+        float temp = other.t;
+        frag_color = heatmap(temp);
         break;
     }
     if (abs(length(mouse_pos - xy) - pen_size) < 0.001){
@@ -471,21 +499,40 @@ void main(){
         ){
         discard;
     }
-    vec4 sun_coord = M_sun * xyz;
-    vec4 light = texture(light_t, sun_coord.xy / 2. + 0.5 + rand2d(sun_coord.xy) / sim_res);
-    float brightness = sun_coord.z > light.a ? 0. : clamp(
-        (xyz.z - light.y) * (1. - light.x) / (light.z - light.y) + light.x, 
-        light.x, 1.
-    );
-    float low_cloud = texture(low1_t, xyz.xy + rand2d(sun_coord.xy) / sim_res).a;
-    float high_cloud = texture(high1_t, xyz.xy + rand2d(sun_coord.xy) / sim_res).a;
-    float cloud = get_cloud_density(interp_elev(
-        xyz.z, 0., low_cloud, high_cloud, 0.
-    ));
-    frag_color = vec4(
-        brightness * sun_color.rgb + (1. - brightness) * ambient_color.xyz,
-        cloud
-    );
+    switch (cloud_mode){
+        case 0:  // velocity
+
+            break;
+        case 1:  // uplift
+            break;
+        case 2:  // pressure
+            break;
+        case 3:  // realistic
+            vec4 sun_coord = M_sun * xyz;
+            vec4 light = texture(light_t, sun_coord.xy / 2. + 0.5 + rand2d(sun_coord.xy) / sim_res);
+            float brightness = sun_coord.z > light.a ? 0. : clamp(
+                (xyz.z - light.y) * (1. - light.x) / (light.z - light.y) + light.x, 
+                light.x, 1.
+            );
+            float low_cloud = texture(low1_t, xyz.xy + rand2d(sun_coord.xy) / sim_res).a;
+            float high_cloud = texture(high1_t, xyz.xy + rand2d(sun_coord.xy) / sim_res).a;
+            float cloud = get_cloud_density(interp_elev(
+                xyz.z, 0., low_cloud, high_cloud, 0.
+            ));
+            frag_color = vec4(
+                brightness * sun_color.rgb + (1. - brightness) * ambient_color.xyz,
+                cloud
+            );            break;
+        case 4:  // temp
+            float ground_temp = texture(other_t, xyz.xy).t;
+            float low_temp = texture(low1_t, xyz.xy).t;
+            float high_temp = texture(high1_t, xyz.xy).t;
+            float temp = interp_elev(xyz.z, ground_temp, low_temp, high_temp, 0.);
+            frag_color = heatmap(temp);
+            frag_color.a = 0.03 * float(temp > 0.5);
+        default:
+            break;
+    }
 
 }`;
 
@@ -797,7 +844,7 @@ function init(){
     let sim_fbo = gl.createFramebuffer();
     let sim_depthbuffer = gl.createRenderbuffer();
     let tex_names = ['low0_t', 'low1_t', 'high0_t', 'high1_t', 'mid_t', 'other_t'];
-    let tex_defaults = [[0.1, 0, 0, 0], [0, 0, 0, 0], [0.1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+    let tex_defaults = [[0.3, 0, 0, 0], [0, 0, 0, 0], [0.3, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
     let textures = [];
     for (var i = 0; i < tex_names.length; i++){
         textures.push({
@@ -881,6 +928,8 @@ function init(){
         gl.uniform1f(gl.getUniformLocation(sim_program, 'pen_size'), document.getElementById('pen-size').value);
         gl.uniform1f(gl.getUniformLocation(sim_program, 'pen_strength'), document.getElementById('pen-strength').value);
         gl.uniform2f(gl.getUniformLocation(sim_program, 'pen_vel'), mouse_state.vel_x, mouse_state.vel_y);
+        gl.uniform1i(gl.getUniformLocation(sim_program, 'light_t'), 6);
+        gl.uniformMatrix4fv(gl.getUniformLocation(sim_program, 'M_sun'), gl.FALSE, M_sun);
         
         // draw
         gl.clearColor(0, 0, 0, 0);
