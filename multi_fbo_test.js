@@ -55,6 +55,7 @@ precision highp sampler2D;
 
 #define ambient_color vec4(30. / 255., 40. / 255., 45. / 255., 1.)
 #define sun_color     vec4(255. / 255., 255. / 255., 237. / 255., 1.)
+#define ground_color  vec4(122. / 255., 261. / 255., 112. / 255., 1.)
 
 
 float interp_elev(float z, float v_ground, float v_low, float v_high, float v_max){
@@ -323,7 +324,7 @@ void main(){
         light = texture(light_t, sun_coord.xy / 2. + 0.5);
         vec3 norm = normalize(vec3(z_scale * vec2(other_w.z - other_e.z, other_s.z - other_n.z) * sim_res, 1.));
         float sunlight = sun_coord.z - light.a > 0.001 ? 0. : clamp(dot(norm, sun_dir), 0., 1.) * light.x;
-        frag_color = sun_color * sunlight + ambient_color * (1. - sunlight);
+        frag_color = (sun_color * sunlight + ambient_color * (1. - sunlight)) * ground_color;
         break;
     }
     if (abs(length(mouse_pos - xy) - pen_size) < 0.001){
@@ -564,6 +565,7 @@ const z_max = 0.3  // max_elev
 const z_min = -0.01
 let sun_dir = [3, 3, 1];
 norm_vect(sun_dir);
+var render_t0 = 0;
 
 
 function invert_vect(arr){
@@ -1014,6 +1016,9 @@ function init(){
         }
 
         // setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
+        let now = performance.now();
+        document.getElementById('debug').innerText = (1000 / (now - render_t0)).toFixed(2);
+        render_t0 = now;
         requestAnimationFrame(loop);  // unlimited fps
     }
     requestAnimationFrame(loop);
