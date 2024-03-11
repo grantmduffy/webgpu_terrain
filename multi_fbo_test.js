@@ -33,6 +33,8 @@ precision highp float;
 precision highp int;
 precision highp sampler2D;
 
+#define render_res vec2(640., 480.)
+
 // simulation parameters
 #define K_pressure 0.1
 #define K_pressure_uplift 0.01
@@ -57,6 +59,17 @@ precision highp sampler2D;
 #define sun_color     vec4(255. / 255., 255. / 255., 237. / 255., 1.)
 #define ground_color  vec4(122. / 255., 261. / 255., 112. / 255., 1.)
 
+float rand(vec2 co){
+    return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+vec2 rand2d(vec2 co){
+    float a = rand(co);
+    return vec2(
+        rand(vec2(co.x, a)),
+        rand(vec2(co.y, a))
+    );
+}
 
 float interp_elev(float z, float v_ground, float v_low, float v_high, float v_max){
     if (z < low_elev){  // below low clouds
@@ -321,7 +334,7 @@ void main(){
         other_e = texture(other_t, xy + vec2(1., 0.) / sim_res);
         other_w = texture(other_t, xy + vec2(-1., 0.) / sim_res);
         vec4 sun_coord = M_sun * vec4(xyz, 1.);
-        light = texture(light_t, sun_coord.xy / 2. + 0.5);
+        light = texture(light_t, sun_coord.xy / 2. + 0.5 + rand2d(sun_coord.xy) / render_res);
         vec3 norm = normalize(vec3(z_scale * vec2(other_w.z - other_e.z, other_s.z - other_n.z) * sim_res, 1.));
         float sunlight = sun_coord.z - light.a > 0.001 ? 0. : clamp(dot(norm, sun_dir), 0., 1.) * light.x;
         frag_color = (sun_color * sunlight + ambient_color * (1. - sunlight)) * ground_color;
@@ -441,6 +454,7 @@ uniform mat4 M_camera_inv;
 uniform mat4 M_sun;
 uniform float near;
 uniform float far;
+uniform vec2 sim_res;
 
 in vec4 xyz;
 out vec4 frag_color;
@@ -458,13 +472,13 @@ void main(){
         discard;
     }
     vec4 sun_coord = M_sun * xyz;
-    vec4 light = texture(light_t, sun_coord.xy / 2. + 0.5);
+    vec4 light = texture(light_t, sun_coord.xy / 2. + 0.5 + rand2d(sun_coord.xy) / sim_res);
     float brightness = sun_coord.z > light.a ? 0. : clamp(
         (xyz.z - light.y) * (1. - light.x) / (light.z - light.y) + light.x, 
         light.x, 1.
     );
-    float low_cloud = texture(low1_t, xyz.xy).a;
-    float high_cloud = texture(high1_t, xyz.xy).a;
+    float low_cloud = texture(low1_t, xyz.xy + rand2d(sun_coord.xy) / sim_res).a;
+    float high_cloud = texture(high1_t, xyz.xy + rand2d(sun_coord.xy) / sim_res).a;
     float cloud = get_cloud_density(interp_elev(
         xyz.z, 0., low_cloud, high_cloud, 0.
     ));
