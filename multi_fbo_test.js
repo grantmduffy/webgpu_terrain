@@ -627,6 +627,8 @@ const z_min = -0.01
 let sun_dir = [3, 3, 1];
 norm_vect(sun_dir);
 var render_t0 = 0;
+var fps_filtered = 0;
+const fps_filt_const = 0.99;
 
 
 function invert_vect(arr){
@@ -1080,7 +1082,8 @@ function init(){
 
         // setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
         let now = performance.now();
-        document.getElementById('debug').innerText = (1000 / (now - render_t0)).toFixed(2);
+        fps_filtered = fps_filt_const * fps_filtered + (1 - fps_filt_const) * (1000 / (now - render_t0));
+        document.getElementById('debug').innerText = (fps_filtered).toFixed(2);
         render_t0 = now;
         requestAnimationFrame(loop);  // unlimited fps
     }
