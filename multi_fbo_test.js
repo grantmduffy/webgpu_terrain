@@ -86,8 +86,8 @@ float interp_elev(float z, float v_ground, float v_low, float v_high, float v_ma
     }
 }
 
-float get_cloud_density(float h){
-    return clamp((h - cloud_threshold) * cloud_sharpness, 0., 1.);
+float get_cloud_density(float h, float t){
+    return clamp(cloud_sharpness * (h - t - cloud_threshold), 0., 1.);
 }
 
 vec4 heatmap(float temp){
@@ -499,6 +499,10 @@ void main(){
         ){
         discard;
     }
+    float ground_temp = texture(other_t, xyz.xy).t;
+    float low_temp = texture(low1_t, xyz.xy).t;
+    float high_temp = texture(high1_t, xyz.xy).t;
+    float temp = interp_elev(xyz.z, ground_temp, low_temp, high_temp, 0.);
     switch (cloud_mode){
         case 0:  // velocity
 
@@ -518,16 +522,12 @@ void main(){
             float high_cloud = texture(high1_t, xyz.xy + rand2d(sun_coord.xy) / sim_res).a;
             float cloud = get_cloud_density(interp_elev(
                 xyz.z, 0., low_cloud, high_cloud, 0.
-            ));
+            ), temp);
             frag_color = vec4(
                 brightness * sun_color.rgb + (1. - brightness) * ambient_color.xyz,
                 cloud
             );            break;
         case 4:  // temp
-            float ground_temp = texture(other_t, xyz.xy).t;
-            float low_temp = texture(low1_t, xyz.xy).t;
-            float high_temp = texture(high1_t, xyz.xy).t;
-            float temp = interp_elev(xyz.z, ground_temp, low_temp, high_temp, 0.);
             frag_color = heatmap(temp);
             frag_color.a = 0.03 * float(temp > 0.5);
         default:
@@ -558,6 +558,7 @@ let sun_fs_src = `
 
 uniform sampler2D low1_t;
 uniform sampler2D high1_t;
+uniform sampler2D other_t;
 uniform vec3 sun_dir;
 uniform mat4 M_sun;
 
@@ -578,9 +579,13 @@ void main(){
         float z_sample = xyz.z + (max_elev - xyz.z) * float(i) / float(n_light_samples);
         float low_cloud = texture(low1_t, xyz.xy + 0.5 * (z_sample - xyz.z) * sun_dir.xy / sun_dir.z).a;
         float high_cloud = texture(high1_t, xyz.xy + 0.5 * (z_sample - xyz.z) * sun_dir.xy / sun_dir.z).a;
+        float ground_temp = texture(other_t, xyz.xy).t;
+        float low_temp = texture(low1_t, xyz.xy + 0.5 * (z_sample - xyz.z) * sun_dir.xy / sun_dir.z).t;
+        float high_temp = texture(high1_t, xyz.xy + 0.5 * (z_sample - xyz.z) * sun_dir.xy / sun_dir.z).t;
+        float temp = interp_elev(z_sample, ground_temp, low_temp, high_temp, 0.);
         float cloud = get_cloud_density(interp_elev(
             z_sample, 0., low_cloud, high_cloud, 0.
-        ));
+        ), temp);
         light_out.x *= (1. - cloud_density_sun * cloud * (max_elev - xyz.z));
         // cloud lower edge
         light_out.y = (cloud > cloud_start) && (light_out.x > cloud_end_density) ? z_sample : light_out.y;
@@ -621,7 +626,7 @@ const PI = 3.14159
 const walk_speed = 0.003;
 const look_speed = 1.;
 const vert_speed = 0.001;
-const n_cloud_planes = 400;
+const n_cloud_planes = 100;
 const z_max = 0.3  // max_elev
 const z_min = -0.01
 let sun_dir = [3, 3, 1];
@@ -846,7 +851,7 @@ function init(){
     let sim_fbo = gl.createFramebuffer();
     let sim_depthbuffer = gl.createRenderbuffer();
     let tex_names = ['low0_t', 'low1_t', 'high0_t', 'high1_t', 'mid_t', 'other_t'];
-    let tex_defaults = [[0.3, 0, 0, 0], [0, 0, 0, 0], [0.3, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+    let tex_defaults = [[0.3, 0, 0, 0], [0, 3, 0, 0], [0.3, 0, 0, 0], [0, 0.5, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
     let textures = [];
     for (var i = 0; i < tex_names.length; i++){
         textures.push({
