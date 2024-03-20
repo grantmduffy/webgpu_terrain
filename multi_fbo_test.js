@@ -111,6 +111,7 @@ void main(){
 let sim_fs_src = `
 
 uniform vec2 mouse_pos;
+uniform vec2 cursor_pos;
 uniform int mouse_btns;
 uniform int keys;
 uniform vec2 sim_res;
@@ -226,7 +227,7 @@ void main(){
     high1_out.t *= K_upper_atmosphere;  // upper radiation to space
 
     vec2 pen_vect = pen_vel * pen_strength;
-    if ((length(mouse_pos - xy) < pen_size) && (mouse_btns == 1) && (keys == 0)){
+    if ((length(cursor_pos - xy) < pen_size) && (mouse_btns == 1) && (keys == 0)){
         switch (pen_type){
         case 0:  // all velocity
             low0_out = vec4(pen_vect, 0., 1.);
@@ -239,7 +240,7 @@ void main(){
             high0_out = vec4(pen_vect, 0., 1.);
             break;
         case 3:  // elevation
-            float r = length(mouse_pos - xy) / pen_size;
+            float r = length(cursor_pos - xy) / pen_size;
             other_out.z += (2. * r * r * r - 3. * r * r + 1.) * pen_strength * K_elevation_strength;
             break;
         case 4:  // rain
@@ -280,6 +281,7 @@ uniform sampler2D other_t;
 uniform sampler2D light_t;
 uniform float pen_size;
 uniform vec2 mouse_pos;
+uniform vec2 cursor_pos;
 uniform int mouse_btns;
 uniform vec2 sim_res;
 uniform vec3 sun_dir;
@@ -368,7 +370,7 @@ void main(){
         frag_color = heatmap(temp);
         break;
     }
-    if (abs(length(mouse_pos - xy) - pen_size) < 0.001){
+    if (abs(length(cursor_pos - xy) - pen_size) < 0.001){
         frag_color = vec4(1.);
     }
 }
@@ -602,6 +604,8 @@ var [width, height] = [1, 1];
 let mouse_state = {
     x: 0.5,
     y: 0.5,
+    physical_x: 0.5,
+    physical_y: 0.5,
     vel_x: 0.0,
     vel_y: 0.0,
     buttons: 0
@@ -626,7 +630,7 @@ const PI = 3.14159
 const walk_speed = 0.003;
 const look_speed = 1.;
 const vert_speed = 0.001;
-const n_cloud_planes = 100;
+const n_cloud_planes = 400;
 const z_max = 0.3  // max_elev
 const z_min = -0.01
 let sun_dir = [3, 3, 1];
@@ -674,6 +678,10 @@ function mouse_move(event){
     } else {
         mouse_state.keys = 0;
     }
+    let [x, y] = get_cursor_point();
+    mouse_state.physical_x = x;
+    mouse_state.physical_y = y;
+    document.getElementById('debug').innerText = x.toFixed(2) + ', ' + y.toFixed(2);
 
     if (mouse_state.buttons == 1){
         if (mouse_state.keys == 1){
@@ -694,6 +702,20 @@ function mouse_move(event){
     }
 
 
+}
+
+
+function get_cursor_point(){
+    let uv0 = new Float32Array([mouse_state.x * 2 - 1, mouse_state.y * 2 - 1, -1, 1]);
+    let uv1 = new Float32Array([mouse_state.x * 2 - 1, mouse_state.y * 2 - 1, 1, 1]);
+    let xyz0 = new Float32Array(4);
+    let xyz1 = new Float32Array(4);
+    mat4.multiply(xyz0, M_camera_inv, uv0);
+    mat4.multiply(xyz1, M_camera_inv, uv1);
+    let t = -(xyz0[2] / xyz0[3]) / (xyz1[2] / xyz1[3] - xyz0[2] / xyz0[3]);
+    let x = xyz0[0] / xyz0[3] + t * (xyz1[0] / xyz1[3] - xyz0[0] / xyz0[3]);
+    let y = xyz0[1] / xyz0[3] + t * (xyz1[1] / xyz1[3] - xyz0[1] / xyz0[3]);
+    return [x, y];
 }
 
 
@@ -928,6 +950,7 @@ function init(){
         
         // set uniforms
         gl.uniform2f(gl.getUniformLocation(sim_program, 'mouse_pos'), mouse_state.x, mouse_state.y);
+        gl.uniform2f(gl.getUniformLocation(sim_program, 'cursor_pos'), mouse_state.physical_x, mouse_state.physical_y);
         gl.uniform1i(gl.getUniformLocation(sim_program, 'mouse_btns'), mouse_state.buttons);
         gl.uniform1i(gl.getUniformLocation(sim_program, 'keys'), mouse_state.keys);
         gl.uniform2f(gl.getUniformLocation(sim_program, 'sim_res'), sim_res, sim_res);
@@ -986,6 +1009,7 @@ function init(){
             gl.uniform1i(gl.getUniformLocation(render2d_program, 'view_mode'), view_mode_options.indexOf(view_mode_el.value));
             gl.uniform1f(gl.getUniformLocation(render2d_program, 'pen_size'), document.getElementById('pen-size').value);
             gl.uniform2f(gl.getUniformLocation(render2d_program, 'mouse_pos'), mouse_state.x, mouse_state.y);
+            gl.uniform2f(gl.getUniformLocation(render2d_program, 'cursor_pos'), mouse_state.physical_x, mouse_state.physical_y);
             gl.uniform1i(gl.getUniformLocation(render2d_program, 'mouse_btns'), mouse_state.buttons);
             gl.uniform2f(gl.getUniformLocation(render2d_program, 'sim_res'), sim_res, sim_res);
             gl.uniform3fv(gl.getUniformLocation(render2d_program, 'sun_dir'), sun_dir)
@@ -1038,6 +1062,7 @@ function init(){
             gl.uniform1i(gl.getUniformLocation(render3d_program, 'view_mode'), view_mode_options.indexOf(view_mode_el.value));
             gl.uniform1f(gl.getUniformLocation(render3d_program, 'pen_size'), document.getElementById('pen-size').value);
             gl.uniform2f(gl.getUniformLocation(render3d_program, 'mouse_pos'), mouse_state.x, mouse_state.y);
+            gl.uniform2f(gl.getUniformLocation(render3d_program, 'cursor_pos'), mouse_state.physical_x, mouse_state.physical_y);
             gl.uniform1i(gl.getUniformLocation(render3d_program, 'mouse_btns'), mouse_state.buttons);
             gl.uniformMatrix4fv(gl.getUniformLocation(render3d_program, 'M_camera'), gl.FALSE, M_camera);
             gl.uniform2f(gl.getUniformLocation(render3d_program, 'sim_res'), sim_res, sim_res);
@@ -1066,6 +1091,7 @@ function init(){
             gl.uniform1i(gl.getUniformLocation(cloud_plane_program, 'view_mode'), view_mode_options.indexOf(view_mode_el.value));
             gl.uniform1f(gl.getUniformLocation(cloud_plane_program, 'pen_size'), document.getElementById('pen-size').value);
             gl.uniform2f(gl.getUniformLocation(cloud_plane_program, 'mouse_pos'), mouse_state.x, mouse_state.y);
+            gl.uniform2f(gl.getUniformLocation(cloud_plane_program, 'cursor_pos'), mouse_state.physical_x, mouse_state.physical_y);
             gl.uniform1i(gl.getUniformLocation(cloud_plane_program, 'mouse_btns'), mouse_state.buttons);
             gl.uniform1i(gl.getUniformLocation(cloud_plane_program, 'cloud_mode'), cloud_mode_options.indexOf(cloud_mode_el.value));
             gl.uniformMatrix4fv(gl.getUniformLocation(cloud_plane_program, 'M_camera'), gl.FALSE, M_camera);
@@ -1085,11 +1111,11 @@ function init(){
 
         }
 
-        // setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
         let now = performance.now();
         fps_filtered = fps_filt_const * fps_filtered + (1 - fps_filt_const) * (1000 / (now - render_t0));
-        document.getElementById('debug').innerText = (fps_filtered).toFixed(2);
+        // document.getElementById('debug').innerText = (fps_filtered).toFixed(2);
         render_t0 = now;
+        // setTimeout(() =>{requestAnimationFrame(loop);}, 1000 / fps);
         requestAnimationFrame(loop);  // unlimited fps
     }
     requestAnimationFrame(loop);
