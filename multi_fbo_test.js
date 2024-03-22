@@ -26,6 +26,7 @@ Surface Light    | g  |  light.x
 Low Cloud Light  | l  |  light.y
 High Cloud Light | h  |  light.z
 Surface Depth    | d  |  light.w
+Low/High Precip  | r  |  mid.xy
 
 */
 
@@ -51,14 +52,17 @@ precision highp sampler2D;
 #define K_low_rad 0.999;
 
 #define z_scale 0.1
+#define water_scale 0.01
 
-#define low_elev 0.02
+#define low_elev 0.04
 #define high_elev 0.12
 #define max_elev 0.3
 #define cloud_transparency 0.05
+#define rain_density 100.
 
 #define cloud_threshold 0.6
 #define cloud_sharpness 1.5
+#define precip_threshold 0.8
 
 #define ambient_color vec4(30. / 255., 40. / 255., 45. / 255., 1.)
 #define sun_color     vec4(255. / 255., 255. / 255., 237. / 255., 1.)
@@ -86,8 +90,24 @@ float interp_elev(float z, float v_ground, float v_low, float v_high, float v_ma
     }
 }
 
+float interp_rain(float z, float v_ground, float v_low, float v_high, float v_max){
+    float z0 = low_elev / 2.;
+    float z1 = (low_elev + high_elev) / 2.;
+    if (z < z0){  // below low clouds
+        return z * (v_low - v_ground) / z0 + v_ground;
+    } else if (z < z1){  // between low and high clouds
+        return (z - z0) * (v_high - v_low) / (z1 - z0) + v_low;
+    } else {  // above high clouds
+        return (z - z1) * (v_max - v_high) / (high_elev - z1) + v_high;
+    }
+}
+
 float get_cloud_density(float h, float t){
-    return clamp(cloud_sharpness * (h - t - cloud_threshold), 0., 1.);
+    return clamp((h - t - cloud_threshold) / (precip_threshold - cloud_threshold), 0., 1.);
+}
+
+float get_precip(float h, float t){
+    return max(h - t - precip_threshold, 0.);
 }
 
 vec4 heatmap(float temp){
@@ -214,6 +234,12 @@ void main(){
     mid_out.w += (low1_out.p - high1_out.p) * K_pressure_uplift;
     
     // TODO: handle elevation, water, and erosion
+    // precipitation
+    mid_out.x = get_precip(low1_out.a, low1_out.t);
+    mid_out.y = get_precip(high1_out.a, high1_out.t);
+    low1_out.a -= mid_out.x;
+    high1_out.a -= mid_out.y;
+    other_out.w += mid_out.x + mid_out.y;
 
     // handle temperature
     vec4 xyz = vec4(xy, other_out.z * z_scale, 1.);
@@ -242,6 +268,7 @@ void main(){
         case 3:  // elevation
             float r = length(cursor_pos - xy) / pen_size;
             other_out.z += (2. * r * r * r - 3. * r * r + 1.) * pen_strength * K_elevation_strength;
+            // other_out.w += (2. * r * r * r - 3. * r * r + 1.) * pen_strength * K_elevation_strength;
             break;
         case 4:  // rain
             break;
@@ -425,28 +452,39 @@ void main(){
 }
 `;
 
-let render3d_fs_src = `
+let water_vs_src = `
 
-uniform sampler2D low0_t;
-uniform sampler2D high0_t;
-uniform sampler2D mid_t;
+uniform mat4 M_camera;
 uniform sampler2D other_t;
 
+in vec2 vert_pos;
+out vec3 xyz;
+out vec2 xy;
+
+void main(){
+    xy = vert_pos;
+    vec4 other = texture(other_t, xy);
+    float elevation = other.z * z_scale;
+    float water_depth = other.w * water_scale;
+    xyz = vec3(vert_pos, elevation + water_depth);
+    gl_Position = M_camera * vec4(xyz, 1.);
+}
+
+`;
+
+
+let water_fs_src = `
 
 in vec3 xyz;
+in vec2 xy;
 out vec4 frag_color;
 
 void main(){
-    vec2 xy = xyz.xy;
-    vec4 low0 = texture(low0_t, xy);
-    vec4 high0 = texture(high0_t, xy);
-    vec4 mid = texture(mid_t, xy);
-    vec4 other = texture(other_t, xy);
-    float uplift = 100. * mid.w;
-    float elevation = other.z;
-    frag_color = vec4(uplift, elevation, -uplift, 1.);
+    frag_color = vec4(0., 0., 1., 0.2);
 }
+
 `;
+
 
 let cloud_plane_vs_src = `
 
@@ -525,10 +563,15 @@ void main(){
             float cloud = get_cloud_density(interp_elev(
                 xyz.z, 0., low_cloud, high_cloud, 0.
             ), temp);
+            vec2 precip = texture(mid_t, xyz.xy).xy;
+            precip.x += precip.y;
+            float rain = clamp(rain_density * interp_rain(xyz.z, precip.x, precip.x, precip.y, 0.), 0., 1.);
             frag_color = vec4(
                 brightness * sun_color.rgb + (1. - brightness) * ambient_color.xyz,
                 cloud
-            );            break;
+            );
+            frag_color.ba = max(frag_color.ba, rain);
+            break;
         case 4:  // temp
             frag_color = heatmap(temp);
             frag_color.a = 0.03 * float(temp > 0.5);
@@ -840,9 +883,11 @@ function init(){
     let arrow_fs = compile_shader(common_src + arrow_fs_src, gl.FRAGMENT_SHADER, '');
     let arrow_program = link_program(arrow_vs, arrow_fs);
     let render3d_vs = compile_shader(common_src + render3d_vs_src, gl.VERTEX_SHADER, '');
-    // let render3d_fs = compile_shader(render3d_fs_src, gl.FRAGMENT_SHADER, '');
     let render3d_fs = compile_shader(common_src + render2d_fs_src, gl.FRAGMENT_SHADER, '');
     let render3d_program = link_program(render3d_vs, render3d_fs);
+    let water_vs = compile_shader(common_src + water_vs_src, gl.VERTEX_SHADER, '');
+    let water_fs = compile_shader(common_src + water_fs_src, gl.FRAGMENT_SHADER, '');
+    let water_program = link_program(water_vs, water_fs);
     let cloud_plane_vs = compile_shader(common_src + cloud_plane_vs_src, gl.VERTEX_SHADER, '');
     let cloud_plane_fs = compile_shader(common_src + cloud_plane_fs_src, gl.FRAGMENT_SHADER, '');
     let cloud_plane_program = link_program(cloud_plane_vs, cloud_plane_fs);
@@ -863,7 +908,7 @@ function init(){
     gl.enableVertexAttribArray(arrow_pos_attr_loc);
     grid_mesh = get_grid_mesh(sim_res, sim_res);
     let grid_mesh_buffer = create_buffer(new Float32Array(grid_mesh.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
-    let grid_mesh_attr_loc = gl.getAttribLocation(render3d_program, 'vert_pos');
+    let grid_mesh_attr_loc = gl.getAttribLocation(render3d_program, 'vert_pos');  // TODO: for other programs that use grid
     cloud_planes = get_cloud_planes(n_cloud_planes);
     let cloud_planes_buffer = create_buffer(new Float32Array(cloud_planes.flat()), gl.ARRAY_BUFFER, gl.STATIC_DRAW);
     let cloud_plane_pos_attr_loc = gl.getAttribLocation(cloud_plane_program, 'vert_pos');
@@ -1076,9 +1121,28 @@ function init(){
             gl.clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT);
             gl.drawArrays(gl.TRIANGLES, 0, grid_mesh.length * 3);
 
+            // draw water
+            gl.useProgram(water_program);
+            gl.enable(gl.BLEND);
+            gl.uniform2f(gl.getUniformLocation(water_program, 'sim_res'), sim_res, sim_res);
+            gl.uniform1i(gl.getUniformLocation(water_program, 'view_mode'), view_mode_options.indexOf(view_mode_el.value));
+            gl.uniform1f(gl.getUniformLocation(water_program, 'pen_size'), document.getElementById('pen-size').value);
+            gl.uniform2f(gl.getUniformLocation(water_program, 'mouse_pos'), mouse_state.x, mouse_state.y);
+            gl.uniform2f(gl.getUniformLocation(water_program, 'cursor_pos'), mouse_state.physical_x, mouse_state.physical_y);
+            gl.uniform1i(gl.getUniformLocation(water_program, 'mouse_btns'), mouse_state.buttons);
+            gl.uniformMatrix4fv(gl.getUniformLocation(water_program, 'M_camera'), gl.FALSE, M_camera);
+            gl.uniform2f(gl.getUniformLocation(water_program, 'sim_res'), sim_res, sim_res);
+            gl.uniform3fv(gl.getUniformLocation(water_program, 'sun_dir'), sun_dir)
+            gl.uniform1i(gl.getUniformLocation(water_program, 'light_t'), 6);
+            gl.uniformMatrix4fv(gl.getUniformLocation(water_program, 'M_sun'), gl.FALSE, M_sun);
+            for (var i = 0; i < textures.length; i++){
+                gl.uniform1i(gl.getUniformLocation(water_program, textures[i].name), i);
+            }
+            gl.drawArrays(gl.TRIANGLES, 0, grid_mesh.length * 3);
+
+
             // draw plane clouds
             gl.useProgram(cloud_plane_program);
-            gl.enable(gl.BLEND);
             // gl.disable(gl.DEPTH_TEST);
             gl.bindBuffer(gl.ARRAY_BUFFER, cloud_planes_buffer);
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
