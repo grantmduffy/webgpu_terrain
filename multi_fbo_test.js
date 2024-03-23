@@ -50,7 +50,7 @@ precision highp sampler2D;
 #define K_surface_air 0.1
 #define K_upper_atmosphere .95;
 #define K_low_rad 0.999;
-#define K_flow 1.
+#define K_flow 1.2
 
 #define z_scale 0.1
 #define water_scale 0.002
@@ -69,7 +69,8 @@ precision highp sampler2D;
 #define ambient_color vec4( 30. / 255.,  40. / 255.,  45. / 255., 1.0)
 #define sun_color     vec4(255. / 255., 255. / 255., 237. / 255., 1.0)
 #define ground_color  vec4(122. / 255., 261. / 255., 112. / 255., 1.0)
-#define water_color   vec4( 66. / 255., 135. / 255., 245. / 255., 0.6)
+#define water_color   vec4( 66. / 255., 135. / 255., 245. / 255., 1.0)
+#define water_transparency 0.2
 
 float rand(vec2 co){
     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
@@ -328,6 +329,7 @@ uniform int mouse_btns;
 uniform vec2 sim_res;
 uniform vec3 sun_dir;
 uniform mat4 M_sun;
+uniform vec2 camera_pos;
 
 in vec2 xy;
 in vec3 xyz;
@@ -492,6 +494,7 @@ let water_fs_src = `
 uniform vec2 sim_res;
 uniform sampler2D other_t;
 uniform vec3 sun_dir;
+uniform vec3 camera_pos;
 
 in vec3 xyz;
 in vec2 xy;
@@ -504,8 +507,11 @@ void main(){
     vec4 other_e = texture(other_t, xy + vec2(1., 0.) / sim_res);
     vec4 other_w = texture(other_t, xy + vec2(-1., 0.) / sim_res);
     vec3 norm = normalize(vec3(z_scale * vec2(other_w.z - other_e.z, other_s.z - other_n.z) * sim_res, 1.));
+    vec3 camera_vec = normalize(camera_pos - xyz);
+    float cos_angle = dot(camera_vec, norm);
     float sunlight = clamp(dot(norm, sun_dir), 0., 1.);
     frag_color = water_color;
+    frag_color.a = (1. - cos_angle) * (1. - water_transparency) + water_transparency;
     frag_color.a *= clamp(other.w * shoreline_sharpness, 0., 1.);
 }
 
@@ -549,6 +555,7 @@ uniform mat4 M_sun;
 uniform float near;
 uniform float far;
 uniform vec2 sim_res;
+uniform vec3 camera_pos;
 
 in vec4 xyz;
 out vec4 frag_color;
@@ -1142,6 +1149,7 @@ function init(){
             gl.uniform3fv(gl.getUniformLocation(render3d_program, 'sun_dir'), sun_dir)
             gl.uniform1i(gl.getUniformLocation(render3d_program, 'light_t'), 6);
             gl.uniformMatrix4fv(gl.getUniformLocation(render3d_program, 'M_sun'), gl.FALSE, M_sun);
+            gl.uniform3f(gl.getUniformLocation(render3d_program, 'camera_pos'), camera_pos[0], camera_pos[1], camera_pos[2]);
             for (var i = 0; i < textures.length; i++){
                 gl.uniform1i(gl.getUniformLocation(render3d_program, textures[i].name), i);
             }
@@ -1163,6 +1171,7 @@ function init(){
             gl.uniform3fv(gl.getUniformLocation(water_program, 'sun_dir'), sun_dir)
             gl.uniform1i(gl.getUniformLocation(water_program, 'light_t'), 6);
             gl.uniformMatrix4fv(gl.getUniformLocation(water_program, 'M_sun'), gl.FALSE, M_sun);
+            gl.uniform3f(gl.getUniformLocation(water_program, 'camera_pos'), camera_pos[0], camera_pos[1], camera_pos[2]);
             for (var i = 0; i < textures.length; i++){
                 gl.uniform1i(gl.getUniformLocation(water_program, textures[i].name), i);
             }
@@ -1193,6 +1202,7 @@ function init(){
             gl.uniform1f(gl.getUniformLocation(cloud_plane_program, 'cloud_density'), 200 / n_cloud_planes);
             gl.uniform1f(gl.getUniformLocation(cloud_plane_program, 'near'), near);
             gl.uniform1f(gl.getUniformLocation(cloud_plane_program, 'far'), far);
+            gl.uniform3f(gl.getUniformLocation(cloud_plane_program, 'camera_pos'), camera_pos[0], camera_pos[1], camera_pos[2]);
             for (var i = 0; i < textures.length; i++){
                 gl.uniform1i(gl.getUniformLocation(cloud_plane_program, textures[i].name), i);
             }
