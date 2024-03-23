@@ -9,7 +9,7 @@ low0   | u | v | - | - |  0  |
 low1   | - | T | P | H |  1  |
 high2  | u | v | - | - |  2  |
 high3  | - | T | P | H |  3  |
-mid    | - | - | - | U |  4  |
+mid    | r | r | - | U |  4  |
 other  | s | T | z | w |  5  |
 light  | g | l | h | d |  6  |
 
@@ -50,9 +50,10 @@ precision highp sampler2D;
 #define K_surface_air 0.1
 #define K_upper_atmosphere .95;
 #define K_low_rad 0.999;
+#define K_flow 1.
 
 #define z_scale 0.1
-#define water_scale 0.01
+#define water_scale 0.002
 
 #define low_elev 0.04
 #define high_elev 0.12
@@ -63,10 +64,12 @@ precision highp sampler2D;
 #define cloud_threshold 0.6
 #define cloud_sharpness 1.5
 #define precip_threshold 0.8
+#define shoreline_sharpness 1.0
 
-#define ambient_color vec4(30. / 255., 40. / 255., 45. / 255., 1.)
-#define sun_color     vec4(255. / 255., 255. / 255., 237. / 255., 1.)
-#define ground_color  vec4(122. / 255., 261. / 255., 112. / 255., 1.)
+#define ambient_color vec4( 30. / 255.,  40. / 255.,  45. / 255., 1.0)
+#define sun_color     vec4(255. / 255., 255. / 255., 237. / 255., 1.0)
+#define ground_color  vec4(122. / 255., 261. / 255., 112. / 255., 1.0)
+#define water_color   vec4( 66. / 255., 135. / 255., 245. / 255., 0.6)
 
 float rand(vec2 co){
     return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
@@ -183,10 +186,10 @@ void main(){
     vec4 mid_s = texture(mid_t, xy + (vec2(0., -K_smooth) - uv_high) / sim_res);
     vec4 mid_e = texture(mid_t, xy + (vec2(K_smooth, 0.) - uv_high) / sim_res);
     vec4 mid_w = texture(mid_t, xy + (vec2(-K_smooth, 0.) - uv_high) / sim_res);
-    vec4 other_n = texture(other_t, xy + (vec2(0., 1.) - uv_high) / sim_res);
-    vec4 other_s = texture(other_t, xy + (vec2(0., -1.) - uv_high) / sim_res);
-    vec4 other_e = texture(other_t, xy + (vec2(1., 0.) - uv_high) / sim_res);
-    vec4 other_w = texture(other_t, xy + (vec2(-1., 0.) - uv_high) / sim_res);
+    vec4 other_n = texture(other_t, xy + (vec2(0., 1.)) / sim_res);
+    vec4 other_s = texture(other_t, xy + (vec2(0., -1.)) / sim_res);
+    vec4 other_e = texture(other_t, xy + (vec2(1., 0.)) / sim_res);
+    vec4 other_w = texture(other_t, xy + (vec2(-1., 0.)) / sim_res);
     
     // calculate divergence
     float div_low = low0_n.y - low0_s.y + low0_e.x - low0_w.x;
@@ -233,7 +236,16 @@ void main(){
     high0_out.y += (high1_s.p - high1_n.p) * K_pressure;
     mid_out.w += (low1_out.p - high1_out.p) * K_pressure_uplift;
     
-    // TODO: handle elevation, water, and erosion
+    // flow water
+    float elev = water_scale * other_out.w + z_scale * other_out.z;
+    vec4 flux = vec4(
+        clamp((water_scale * other_n.w + z_scale * other_n.z - elev) / 5., -water_scale * other_out.w / 5., water_scale * other_n.w / 5.) / water_scale,
+        clamp((water_scale * other_s.w + z_scale * other_s.z - elev) / 5., -water_scale * other_out.w / 5., water_scale * other_s.w / 5.) / water_scale,
+        clamp((water_scale * other_e.w + z_scale * other_e.z - elev) / 5., -water_scale * other_out.w / 5., water_scale * other_e.w / 5.) / water_scale,
+        clamp((water_scale * other_w.w + z_scale * other_w.z - elev) / 5., -water_scale * other_out.w / 5., water_scale * other_w.w / 5.) / water_scale
+    );
+    other_out.w += K_flow * dot(flux, vec4(1.));
+
     // precipitation
     mid_out.x = get_precip(low1_out.a, low1_out.t);
     mid_out.y = get_precip(high1_out.a, high1_out.t);
@@ -271,13 +283,16 @@ void main(){
             // other_out.w += (2. * r * r * r - 3. * r * r + 1.) * pen_strength * K_elevation_strength;
             break;
         case 4:  // rain
+            // other_out.w += (2. * r * r * r - 3. * r * r + 1.) * pen_strength * K_elevation_strength;
+            other_out.w = pen_strength;
             break;
         }
         low1_out.a = 1.;
     }
     
-    // clip elevation to 0-1 
+    // clip values to 0-1 
     other_out.z = clamp(other_out.z, 0., 1.);
+    other_out.w = max(0., other_out.w);
 }
 
 `;
@@ -474,13 +489,24 @@ void main(){
 
 
 let water_fs_src = `
+uniform vec2 sim_res;
+uniform sampler2D other_t;
+uniform vec3 sun_dir;
 
 in vec3 xyz;
 in vec2 xy;
 out vec4 frag_color;
 
 void main(){
-    frag_color = vec4(0., 0., 1., 0.2);
+    vec4 other = texture(other_t, xy);
+    vec4 other_n = texture(other_t, xy + vec2(0., 1.) / sim_res);
+    vec4 other_s = texture(other_t, xy + vec2(0., -1.) / sim_res);
+    vec4 other_e = texture(other_t, xy + vec2(1., 0.) / sim_res);
+    vec4 other_w = texture(other_t, xy + vec2(-1., 0.) / sim_res);
+    vec3 norm = normalize(vec3(z_scale * vec2(other_w.z - other_e.z, other_s.z - other_n.z) * sim_res, 1.));
+    float sunlight = clamp(dot(norm, sun_dir), 0., 1.);
+    frag_color = water_color;
+    frag_color.a *= clamp(other.w * shoreline_sharpness, 0., 1.);
 }
 
 `;
@@ -568,9 +594,9 @@ void main(){
             float rain = clamp(rain_density * interp_rain(xyz.z, precip.x, precip.x, precip.y, 0.), 0., 1.);
             frag_color = vec4(
                 brightness * sun_color.rgb + (1. - brightness) * ambient_color.xyz,
-                cloud
+                max(cloud, rain)
             );
-            frag_color.ba = max(frag_color.ba, rain);
+            // frag_color.ba = max(frag_color.ba, rain);
             break;
         case 4:  // temp
             frag_color = heatmap(temp);
