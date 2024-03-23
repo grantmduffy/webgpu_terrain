@@ -733,6 +733,11 @@ function norm_vect(arr){
 function mouse_move(event){
     let new_x = event.offsetX / canvas.width;
     let new_y = 1 - event.offsetY / canvas.height;
+    let [x, y] = get_cursor_point(new_x, new_y);
+    mouse_state.physical_vel_x = (x - mouse_state.physical_x) * K_drag;
+    mouse_state.physical_vel_y = (y - mouse_state.physical_y) * K_drag;
+    mouse_state.physical_x = x;
+    mouse_state.physical_y = y;
     mouse_state.vel_x = (new_x - mouse_state.x) * K_drag;
     mouse_state.vel_y = (new_y - mouse_state.y) * K_drag;
     mouse_state.x = new_x;
@@ -747,9 +752,6 @@ function mouse_move(event){
     } else {
         mouse_state.keys = 0;
     }
-    let [x, y] = get_cursor_point();
-    mouse_state.physical_x = x;
-    mouse_state.physical_y = y;
     document.getElementById('debug').innerText = x.toFixed(2) + ', ' + y.toFixed(2);
 
     if (mouse_state.buttons == 1){
@@ -774,17 +776,17 @@ function mouse_move(event){
 }
 
 
-function get_cursor_point(){
-    let uv0 = new Float32Array([mouse_state.x * 2 - 1, mouse_state.y * 2 - 1, -1, 1]);
-    let uv1 = new Float32Array([mouse_state.x * 2 - 1, mouse_state.y * 2 - 1, 1, 1]);
+function get_cursor_point(x, y){
+    let uv0 = new Float32Array([x * 2 - 1, y * 2 - 1, -1, 1]);
+    let uv1 = new Float32Array([x * 2 - 1, y * 2 - 1, 1, 1]);
     let xyz0 = new Float32Array(4);
     let xyz1 = new Float32Array(4);
     mat4.multiply(xyz0, M_camera_inv, uv0);
     mat4.multiply(xyz1, M_camera_inv, uv1);
     let t = -(xyz0[2] / xyz0[3]) / (xyz1[2] / xyz1[3] - xyz0[2] / xyz0[3]);
-    let x = xyz0[0] / xyz0[3] + t * (xyz1[0] / xyz1[3] - xyz0[0] / xyz0[3]);
-    let y = xyz0[1] / xyz0[3] + t * (xyz1[1] / xyz1[3] - xyz0[1] / xyz0[3]);
-    return [x, y];
+    let x_out = xyz0[0] / xyz0[3] + t * (xyz1[0] / xyz1[3] - xyz0[0] / xyz0[3]);
+    let y_out = xyz0[1] / xyz0[3] + t * (xyz1[1] / xyz1[3] - xyz0[1] / xyz0[3]);
+    return [x_out, y_out];
 }
 
 
@@ -1028,7 +1030,7 @@ function init(){
         gl.uniform1i(gl.getUniformLocation(sim_program, 'pen_type'), pen_type_options.indexOf(pen_type_el.value));
         gl.uniform1f(gl.getUniformLocation(sim_program, 'pen_size'), document.getElementById('pen-size').value);
         gl.uniform1f(gl.getUniformLocation(sim_program, 'pen_strength'), document.getElementById('pen-strength').value);
-        gl.uniform2f(gl.getUniformLocation(sim_program, 'pen_vel'), mouse_state.vel_x, mouse_state.vel_y);
+        gl.uniform2f(gl.getUniformLocation(sim_program, 'pen_vel'), mouse_state.physical_vel_x, mouse_state.physical_vel_y);
         gl.uniform1i(gl.getUniformLocation(sim_program, 'light_t'), 6);
         gl.uniformMatrix4fv(gl.getUniformLocation(sim_program, 'M_sun'), gl.FALSE, M_sun);
         
