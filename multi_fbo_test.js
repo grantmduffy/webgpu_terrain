@@ -65,6 +65,8 @@ precision highp sampler2D;
 #define cloud_sharpness 1.5
 #define precip_threshold 0.8
 #define shoreline_sharpness 1.0
+#define rainbow_min 0.743
+#define rainbow_max 0.766
 
 #define ambient_color vec4( 30. / 255.,  40. / 255.,  45. / 255., 1.0)
 #define sun_color     vec4(255. / 255., 255. / 255., 237. / 255., 1.0)
@@ -116,6 +118,22 @@ float get_precip(float h, float t){
 
 vec4 heatmap(float temp){
     return vec4(temp - 0.5, temp - 1., max(0.5 - temp, temp - 2.), 1.);
+}
+
+vec3 hsv2rgb(vec3 c){
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+vec3 get_rainbow(float cos_angle){
+    float amt = (cos_angle - rainbow_min) / (rainbow_max - rainbow_min);
+    float a = clamp(abs(2. * amt - 1.) - 1., 0., 1.);
+    return mix(
+        hsv2rgb(vec3(clamp(amt, 0., .72), 1., 1.)),
+        vec3(1.),
+        a
+    );
 }
 
 `;
@@ -556,6 +574,7 @@ uniform float near;
 uniform float far;
 uniform vec2 sim_res;
 uniform vec3 camera_pos;
+uniform vec3 sun_dir;
 
 in vec4 xyz;
 out vec4 frag_color;
@@ -599,11 +618,20 @@ void main(){
             vec2 precip = texture(mid_t, xyz.xy).xy;
             precip.x += precip.y;
             float rain = clamp(rain_density * interp_rain(xyz.z, precip.x, precip.x, precip.y, 0.), 0., 1.);
+            float cos_angle = dot(sun_dir, normalize(camera_pos - xyz.xyz));
+            vec3 light_color = mix(
+                ambient_color.xyz, 
+                sun_color.xyz * mix(
+                    vec3(1.), 
+                    get_rainbow(cos_angle), 
+                    rain * (1. - cloud)
+                ), brightness
+            );
             frag_color = vec4(
-                brightness * sun_color.rgb + (1. - brightness) * ambient_color.xyz,
+                light_color,
                 max(cloud, rain)
             );
-            // frag_color.ba = max(frag_color.ba, rain);
+            // frag_color = get_rainbow(cos_angle);
             break;
         case 4:  // temp
             frag_color = heatmap(temp);
@@ -1203,6 +1231,7 @@ function init(){
             gl.uniform1f(gl.getUniformLocation(cloud_plane_program, 'near'), near);
             gl.uniform1f(gl.getUniformLocation(cloud_plane_program, 'far'), far);
             gl.uniform3f(gl.getUniformLocation(cloud_plane_program, 'camera_pos'), camera_pos[0], camera_pos[1], camera_pos[2]);
+            gl.uniform3fv(gl.getUniformLocation(cloud_plane_program, 'sun_dir'), sun_dir);
             for (var i = 0; i < textures.length; i++){
                 gl.uniform1i(gl.getUniformLocation(cloud_plane_program, textures[i].name), i);
             }
