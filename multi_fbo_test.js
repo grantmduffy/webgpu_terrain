@@ -423,7 +423,6 @@ void main(){
         light = texture(light_t, sun_coord.xy / 2. + 0.5 + rand2d(sun_coord.xy) / render_res);
         vec3 norm = normalize(vec3(z_scale * vec2(other_w.z - other_e.z, other_s.z - other_n.z) * sim_res, 1.));
         float sunlight = sun_coord.z - light.a > 0.001 ? 0. : clamp(dot(norm, sun_dir), 0., 1.) * light.x;
-        // float sunlight = sun_coord.z - light.a > 0.001 ? 0. : light.x;
         frag_color = (sun_color * sunlight + ambient_color * (1. - sunlight)) * ground_color;
         break;
     case 6:  // temp
@@ -507,12 +506,13 @@ void main(){
 
 `;
 
-
 let water_fs_src = `
 uniform vec2 sim_res;
 uniform sampler2D other_t;
 uniform vec3 sun_dir;
 uniform vec3 camera_pos;
+uniform sampler2D light_t;
+uniform mat4 M_sun;
 
 in vec3 xyz;
 in vec2 xy;
@@ -524,17 +524,18 @@ void main(){
     vec4 other_s = texture(other_t, xy + vec2(0., -1.) / sim_res);
     vec4 other_e = texture(other_t, xy + vec2(1., 0.) / sim_res);
     vec4 other_w = texture(other_t, xy + vec2(-1., 0.) / sim_res);
+    vec4 sun_coord = M_sun * vec4(xyz, 1.);
+    vec4 light = texture(light_t, sun_coord.xy / 2. + 0.5 + rand2d(sun_coord.xy) / render_res);
     vec3 norm = normalize(vec3(z_scale * vec2(other_w.z - other_e.z, other_s.z - other_n.z) * sim_res, 1.));
     vec3 camera_vec = normalize(camera_pos - xyz);
     float cos_angle = dot(camera_vec, norm);
-    float sunlight = clamp(dot(norm, sun_dir), 0., 1.);
-    frag_color = water_color;
+    float sunlight = sun_coord.z - light.a > 0.001 ? 0. : clamp(dot(norm, sun_dir), 0., 1.) * light.x;
+    frag_color = water_color * mix(ambient_color, sun_color, sunlight);
     frag_color.a = (1. - cos_angle) * (1. - water_transparency) + water_transparency;
     frag_color.a *= clamp(other.w * shoreline_sharpness, 0., 1.);
 }
 
 `;
-
 
 let cloud_plane_vs_src = `
 
@@ -555,7 +556,8 @@ void main(){
     xyz = vert_pos.z * (xyz_far - xyz_close) + xyz_close;
     xyz /= xyz.w;
     gl_Position = M_camera * xyz;
-}`;
+}
+`;
 
 let cloud_plane_fs_src = `
 
@@ -640,7 +642,8 @@ void main(){
             break;
     }
 
-}`;
+}
+`;
 
 let sun_vs_src = `
 
