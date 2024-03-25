@@ -668,6 +668,7 @@ let sun_fs_src = `
 uniform sampler2D low1_t;
 uniform sampler2D high1_t;
 uniform sampler2D other_t;
+uniform sampler2D mid_t;
 uniform vec3 sun_dir;
 uniform mat4 M_sun;
 
@@ -686,18 +687,29 @@ void main(){
     light_out = vec4(1., 0., 0., 0.);
     for (int i = n_light_samples; i > 0; i--){
         float z_sample = xyz.z + (max_elev - xyz.z) * float(i) / float(n_light_samples);
-        float low_cloud = texture(low1_t, xyz.xy + 0.5 * (z_sample - xyz.z) * sun_dir.xy / sun_dir.z).a;
-        float high_cloud = texture(high1_t, xyz.xy + 0.5 * (z_sample - xyz.z) * sun_dir.xy / sun_dir.z).a;
+        vec2 xy_sample = xyz.xy + 0.5 * (z_sample - xyz.z) * sun_dir.xy / sun_dir.z;
+        float low_cloud = texture(low1_t, xy_sample).a;
+        float high_cloud = texture(high1_t, xy_sample).a;
         float ground_temp = texture(other_t, xyz.xy).t;
         float low_temp = texture(low1_t, xyz.xy + 0.5 * (z_sample - xyz.z) * sun_dir.xy / sun_dir.z).t;
-        float high_temp = texture(high1_t, xyz.xy + 0.5 * (z_sample - xyz.z) * sun_dir.xy / sun_dir.z).t;
+        float high_temp = texture(high1_t, xy_sample).t;
         float temp = interp_elev(z_sample, ground_temp, low_temp, high_temp, 0.);
         float cloud = get_cloud_density(interp_elev(
             z_sample, 0., low_cloud, high_cloud, 0.
         ), temp);
+
+        // rain
+        // vec2 precip = texture(mid_t, xy_sample).xy;
+        // precip.x += precip.y;
+        // float rain = clamp(rain_density * interp_rain(z_sample, precip.x, precip.x, precip.y, 0.), 0., 1.);
+        // light_out.x *= (1. - cloud_density_sun * max(cloud, rain) * (max_elev - xyz.z));
+        
+        // no rain
         light_out.x *= (1. - cloud_density_sun * cloud * (max_elev - xyz.z));
+        
         // cloud lower edge
         light_out.y = (cloud > cloud_start) && (light_out.x > cloud_end_density) ? z_sample : light_out.y;
+        
         // cloud upper edge
         light_out.z = (cloud > cloud_start) && (light_out.z == 0.) ? z_sample : light_out.z;
     }
@@ -731,8 +743,8 @@ let camera_pos = [0.5, 0.5, 0.25];
 let camera_rot = [45, 0];
 // let camera_pos = [0.5, 0.5, 2];
 // let camera_rot = [0, 0];
-let near = 0.01
-let far = 2
+let near = 0.03
+let far = 1.5
 const PI = 3.14159
 const walk_speed = 0.003;
 const look_speed = 1.;
