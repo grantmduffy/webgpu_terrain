@@ -54,12 +54,15 @@ precision highp sampler2D;
 
 #define z_scale 0.1
 #define water_scale 0.002
+#define snow_scale 0.005
+#define floating_ice_thickness 0.001
 
 #define low_elev 0.04
 #define high_elev 0.12
 #define max_elev 0.3
 #define cloud_transparency 0.05
 #define rain_density 100.
+#define freezing_temp 0.3
 
 #define cloud_threshold 0.6
 #define cloud_sharpness 1.5
@@ -70,7 +73,7 @@ precision highp sampler2D;
 
 #define ambient_color vec4( 30. / 255.,  40. / 255.,  45. / 255., 1.0)
 #define sun_color     vec4(255. / 255., 255. / 255., 237. / 255., 1.0)
-#define ground_color  vec4(122. / 255., 261. / 255., 112. / 255., 1.0)
+#define grass_color  vec4(122. / 255., 261. / 255., 112. / 255., 1.0)
 #define water_color   vec4( 66. / 255., 135. / 255., 245. / 255., 1.0)
 #define water_transparency 0.2
 
@@ -134,6 +137,18 @@ vec3 get_rainbow(float cos_angle){
         vec3(1.),
         a
     );
+}
+
+vec4 get_ground_color(float temp){
+    return temp > freezing_temp ? grass_color : vec4(0.5, 0.5, 0.5, 1.);
+}
+
+vec4 get_water_color(float temp, float sunlight, float cos_angle, float depth){
+    vec4 white_color =  mix(ambient_color, sun_color, sunlight);
+    return temp > freezing_temp ? vec4(
+        white_color.rgb * water_color.rgb,
+        ((1. - cos_angle) * (1. - water_transparency) + water_transparency) * clamp(depth * shoreline_sharpness, 0., 1.)
+    ) : white_color;
 }
 
 `;
@@ -255,13 +270,18 @@ void main(){
     high0_out.y += (high1_s.p - high1_n.p) * K_pressure;
     mid_out.w += (low1_out.p - high1_out.p) * K_pressure_uplift;
     
-    // flow water
+    // flow water/ice
+    float temp = interp_elev(other_out.z * z_scale + other_out.w * water_scale, other_out.t, low1_out.t, high1_out.t, 0.);
+    float temp_n = interp_elev(other_n.z * z_scale + other_n.w * water_scale, other_n.t, low1_n.t, high1_n.t, 0.);
+    float temp_s = interp_elev(other_s.z * z_scale + other_s.w * water_scale, other_s.t, low1_n.t, high1_s.t, 0.);
+    float temp_e = interp_elev(other_e.z * z_scale + other_e.w * water_scale, other_e.t, low1_n.t, high1_e.t, 0.);
+    float temp_w = interp_elev(other_w.z * z_scale + other_w.w * water_scale, other_w.t, low1_n.t, high1_w.t, 0.);
     float elev = water_scale * other_out.w + z_scale * other_out.z;
-    vec4 flux = vec4(
-        clamp((water_scale * other_n.w + z_scale * other_n.z - elev) / 5., -water_scale * other_out.w / 5., water_scale * other_n.w / 5.) / water_scale,
-        clamp((water_scale * other_s.w + z_scale * other_s.z - elev) / 5., -water_scale * other_out.w / 5., water_scale * other_s.w / 5.) / water_scale,
-        clamp((water_scale * other_e.w + z_scale * other_e.z - elev) / 5., -water_scale * other_out.w / 5., water_scale * other_e.w / 5.) / water_scale,
-        clamp((water_scale * other_w.w + z_scale * other_w.z - elev) / 5., -water_scale * other_out.w / 5., water_scale * other_w.w / 5.) / water_scale
+    vec4 flux = float(temp > freezing_temp) * vec4(
+        float(temp_n > freezing_temp) * clamp((water_scale * other_n.w + z_scale * other_n.z - elev) / 5., -water_scale * other_out.w / 5., water_scale * other_n.w / 5.) / water_scale,
+        float(temp_s > freezing_temp) * clamp((water_scale * other_s.w + z_scale * other_s.z - elev) / 5., -water_scale * other_out.w / 5., water_scale * other_s.w / 5.) / water_scale,
+        float(temp_e > freezing_temp) * clamp((water_scale * other_e.w + z_scale * other_e.z - elev) / 5., -water_scale * other_out.w / 5., water_scale * other_e.w / 5.) / water_scale,
+        float(temp_w > freezing_temp) * clamp((water_scale * other_w.w + z_scale * other_w.z - elev) / 5., -water_scale * other_out.w / 5., water_scale * other_w.w / 5.) / water_scale
     );
     other_out.w += K_flow * dot(flux, vec4(1.));
 
@@ -302,8 +322,8 @@ void main(){
             // other_out.w += (2. * r * r * r - 3. * r * r + 1.) * pen_strength * K_elevation_strength;
             break;
         case 4:  // rain
-            // other_out.w += (2. * r * r * r - 3. * r * r + 1.) * pen_strength * K_elevation_strength;
-            other_out.w = pen_strength;
+            other_out.w += (2. * r * r * r - 3. * r * r + 1.) * pen_strength * K_elevation_strength;
+            // other_out.w = pen_strength;
             break;
         }
         low1_out.a = 1.;
@@ -371,6 +391,7 @@ float h_low;
 float h_high;
 float uplift;
 float elevation;
+float temp;
 
 void main(){
     switch (view_mode){
@@ -419,15 +440,19 @@ void main(){
         other_s = texture(other_t, xy + vec2(0., -1.) / sim_res);
         other_e = texture(other_t, xy + vec2(1., 0.) / sim_res);
         other_w = texture(other_t, xy + vec2(-1., 0.) / sim_res);
+        low1 = texture(low1_t, xy);
+        high1 = texture(high1_t, xy);
         vec4 sun_coord = M_sun * vec4(xyz, 1.);
         light = texture(light_t, sun_coord.xy / 2. + 0.5 + rand2d(sun_coord.xy) / render_res);
         vec3 norm = normalize(vec3(z_scale * vec2(other_w.z - other_e.z, other_s.z - other_n.z) * sim_res, 1.));
         float sunlight = sun_coord.z - light.a > 0.001 ? 0. : clamp(dot(norm, sun_dir), 0., 1.) * light.x;
-        frag_color = (sun_color * sunlight + ambient_color * (1. - sunlight)) * ground_color;
+        temp = interp_elev(z_scale * other.z, other.t, low1.t, high1.t, 0.);
+        frag_color = (sun_color * sunlight + ambient_color * (1. - sunlight)) * get_ground_color(temp);
+        // frag_color = vec4(vec3(float(temp < freezing_temp)), 1.);
         break;
     case 6:  // temp
         other = texture(other_t, xy);
-        float temp = other.t;
+        temp = other.t;
         frag_color = heatmap(temp);
         break;
     }
@@ -490,6 +515,8 @@ let water_vs_src = `
 
 uniform mat4 M_camera;
 uniform sampler2D other_t;
+uniform sampler2D low1_t;
+uniform sampler2D high1_t;
 
 in vec2 vert_pos;
 out vec3 xyz;
@@ -498,8 +525,12 @@ out vec2 xy;
 void main(){
     xy = vert_pos;
     vec4 other = texture(other_t, xy);
+    vec4 low1 = texture(low1_t, xy);
+    vec4 high1 = texture(high1_t, xy);
     float elevation = other.z * z_scale;
-    float water_depth = other.w * water_scale;
+    float temp = interp_elev(elevation, other.t, low1.t, high1.t, 0.);
+    float water_depth = temp > freezing_temp ? other.w * water_scale : min(other.w * snow_scale, other.w * water_scale + floating_ice_thickness);
+    // float water_depth = other.w * water_scale;
     xyz = vec3(vert_pos, elevation + water_depth);
     gl_Position = M_camera * vec4(xyz, 1.);
 }
@@ -513,6 +544,8 @@ uniform vec3 sun_dir;
 uniform vec3 camera_pos;
 uniform sampler2D light_t;
 uniform mat4 M_sun;
+uniform sampler2D low1_t;
+uniform sampler2D high1_t;
 
 in vec3 xyz;
 in vec2 xy;
@@ -524,15 +557,20 @@ void main(){
     vec4 other_s = texture(other_t, xy + vec2(0., -1.) / sim_res);
     vec4 other_e = texture(other_t, xy + vec2(1., 0.) / sim_res);
     vec4 other_w = texture(other_t, xy + vec2(-1., 0.) / sim_res);
+    vec4 low1 = texture(low1_t, xy);
+    vec4 high1 = texture(high1_t, xy);
     vec4 sun_coord = M_sun * vec4(xyz, 1.);
     vec4 light = texture(light_t, sun_coord.xy / 2. + 0.5 + rand2d(sun_coord.xy) / render_res);
     vec3 norm = normalize(vec3(z_scale * vec2(other_w.z - other_e.z, other_s.z - other_n.z) * sim_res, 1.));
     vec3 camera_vec = normalize(camera_pos - xyz);
     float cos_angle = dot(camera_vec, norm);
     float sunlight = sun_coord.z - light.a > 0.001 ? 0. : clamp(dot(norm, sun_dir), 0., 1.) * light.x;
-    frag_color = water_color * mix(ambient_color, sun_color, sunlight);
-    frag_color.a = (1. - cos_angle) * (1. - water_transparency) + water_transparency;
-    frag_color.a *= clamp(other.w * shoreline_sharpness, 0., 1.);
+    float temp = interp_elev(xyz.z, other.t, low1.t, high1.t, 0.);
+    // frag_color = get_water_color(temp) * mix(ambient_color, sun_color, sunlight);
+    // frag_color.a = (1. - cos_angle) * (1. - water_transparency) + water_transparency;
+    // frag_color.a *= clamp(other.w * shoreline_sharpness, 0., 1.);
+
+    frag_color = get_water_color(temp, sunlight, cos_angle, other.w);
 }
 
 `;
