@@ -51,6 +51,7 @@ precision highp sampler2D;
 #define K_upper_atmosphere .95;
 #define K_low_rad 0.999;
 #define K_flow 1.2
+#define K_flow_glacier 0.05
 
 #define z_scale 0.1
 #define water_scale 0.002
@@ -62,7 +63,7 @@ precision highp sampler2D;
 #define max_elev 0.3
 #define cloud_transparency 0.05
 #define rain_density 100.
-#define freezing_temp 0.3
+#define freezing_temp 0.5
 
 #define cloud_threshold 0.6
 #define cloud_sharpness 1.5
@@ -277,13 +278,13 @@ void main(){
     float temp_e = interp_elev(other_e.z * z_scale + other_e.w * water_scale, other_e.t, low1_n.t, high1_e.t, 0.);
     float temp_w = interp_elev(other_w.z * z_scale + other_w.w * water_scale, other_w.t, low1_n.t, high1_w.t, 0.);
     float elev = water_scale * other_out.w + z_scale * other_out.z;
-    vec4 flux = float(temp > freezing_temp) * vec4(
-        float(temp_n > freezing_temp) * clamp((water_scale * other_n.w + z_scale * other_n.z - elev) / 5., -water_scale * other_out.w / 5., water_scale * other_n.w / 5.) / water_scale,
-        float(temp_s > freezing_temp) * clamp((water_scale * other_s.w + z_scale * other_s.z - elev) / 5., -water_scale * other_out.w / 5., water_scale * other_s.w / 5.) / water_scale,
-        float(temp_e > freezing_temp) * clamp((water_scale * other_e.w + z_scale * other_e.z - elev) / 5., -water_scale * other_out.w / 5., water_scale * other_e.w / 5.) / water_scale,
-        float(temp_w > freezing_temp) * clamp((water_scale * other_w.w + z_scale * other_w.z - elev) / 5., -water_scale * other_out.w / 5., water_scale * other_w.w / 5.) / water_scale
+    vec4 flux = vec4(
+        ((temp_n > freezing_temp) && (temp > freezing_temp) ? K_flow : K_flow_glacier) * clamp((water_scale * other_n.w + z_scale * other_n.z - elev) / 5., -water_scale * other_out.w / 5., water_scale * other_n.w / 5.) / water_scale,
+        ((temp_s > freezing_temp) && (temp > freezing_temp) ? K_flow : K_flow_glacier) * clamp((water_scale * other_s.w + z_scale * other_s.z - elev) / 5., -water_scale * other_out.w / 5., water_scale * other_s.w / 5.) / water_scale,
+        ((temp_e > freezing_temp) && (temp > freezing_temp) ? K_flow : K_flow_glacier) * clamp((water_scale * other_e.w + z_scale * other_e.z - elev) / 5., -water_scale * other_out.w / 5., water_scale * other_e.w / 5.) / water_scale,
+        ((temp_w > freezing_temp) && (temp > freezing_temp) ? K_flow : K_flow_glacier) * clamp((water_scale * other_w.w + z_scale * other_w.z - elev) / 5., -water_scale * other_out.w / 5., water_scale * other_w.w / 5.) / water_scale
     );
-    other_out.w += K_flow * dot(flux, vec4(1.));
+    other_out.w += dot(flux, vec4(1.));
 
     // precipitation
     mid_out.x = get_precip(low1_out.a, low1_out.t);
@@ -322,7 +323,7 @@ void main(){
             // other_out.w += (2. * r * r * r - 3. * r * r + 1.) * pen_strength * K_elevation_strength;
             break;
         case 4:  // rain
-            other_out.w += (2. * r * r * r - 3. * r * r + 1.) * pen_strength * K_elevation_strength;
+            other_out.w += 10. * (2. * r * r * r - 3. * r * r + 1.) * pen_strength * K_elevation_strength;
             // other_out.w = pen_strength;
             break;
         }
