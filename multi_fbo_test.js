@@ -46,10 +46,23 @@ precision highp sampler2D;
 #define K_p_decay .9
 #define K_smooth 1.0
 #define K_elevation_strength 0.01
-#define K_sun_absorbtion .003
-#define K_surface_air 0.1
-#define K_upper_atmosphere .95;
-#define K_low_rad 0.999;
+
+// thermal properties, Tao units in frames
+#define T_eq_surface 1.
+#define T_eq_shade 0.6
+#define Tao_surface 100.
+#define Tao_surface_to_air 3000.
+#define Tao_air_from_surface 100.
+#define Tao_radiation 5.
+#define C_surface (Tao_surface_to_air / Tao_air_from_surface)
+#define K0 (C_surface / Tao_surface)
+#define K1 (1. / Tao_air_from_surface)
+#define K2 (1. / Tao_radiation)
+#define Q_in (T_eq_surface * K0)
+#define Q_in_shade (T_eq_shade * K0)
+#define freezing_temp 0.6
+
+// surface properties
 #define K_flow 1.2
 #define K_flow_glacier 0.05
 
@@ -63,7 +76,6 @@ precision highp sampler2D;
 #define max_elev 0.3
 #define cloud_transparency 0.05
 #define rain_density 100.
-#define freezing_temp 0.5
 
 #define cloud_threshold 0.6
 #define cloud_sharpness 1.5
@@ -121,7 +133,18 @@ float get_precip(float h, float t){
 }
 
 vec4 heatmap(float temp){
-    return vec4(temp - 0.5, temp - 1., max(0.5 - temp, temp - 2.), 1.);
+    // 0:   (0, 0, 1) x=0
+    // fl:  (0, 0, 0) x=1
+    // 2fl: (1, 0, 0) x=2
+    // 3fl: (1, 1, 0) x=3
+    // 4fl: (1, 1, 1) x=4
+    float x = temp / freezing_temp;
+    return float(mod(x, 0.25) > 0.01) * vec4(
+        x - 1., 
+        x - 2., 
+        max(1. - x, x - 3.), 
+        1.
+    );
 }
 
 vec3 hsv2rgb(vec3 c){
@@ -296,14 +319,15 @@ void main(){
     // handle temperature
     vec4 xyz = vec4(xy, other_out.z * z_scale, 1.);
     vec4 sun_coord = M_sun * xyz;
-    vec4 light = texture(light_t, sun_coord.xy / 2. + 0.5);    
-    other_out.t += sun_coord.z - light.a > 0.001 ? 0. : K_sun_absorbtion * light.x;  // sun heats ground
-    float surface_air_heat = K_surface_air * (other_out.t - low1_out.t);  // ground heats air
-    other_out.t -= surface_air_heat;
-    low1_out.t += surface_air_heat;
-    low1_out.t *= K_low_rad;
-    high1_out.t *= K_upper_atmosphere;  // upper radiation to space
-
+    vec4 light = texture(light_t, sun_coord.xy / 2. + 0.5);
+    // other_out.t += Q_in - other_out.t * K0;
+    other_out.t += (
+        mix(Q_in_shade, Q_in, (sun_coord.z - light.a > 0.001 ? 0. : light.x))  // heat from sun
+        - other_out.t * K0                                     // heat lost to radiation
+        - (other_out.t - low1_out.t) * K1                      // heat lost to air via convection
+    ) / C_surface;
+    low1_out.t += (other_out.t - low1_out.t) * K1;                        // heat gained from ground
+    high1_out.t -= high1_out.t * K2;                                      // heat lost to radiation
     vec2 pen_vect = pen_vel * pen_strength;
     if ((length(cursor_pos - xy) < pen_size) && (mouse_btns == 1) && (keys == 0)){
         switch (pen_type){
@@ -453,7 +477,9 @@ void main(){
         break;
     case 6:  // temp
         other = texture(other_t, xy);
-        temp = other.t;
+        low1 = texture(low1_t, xy);
+        high1 = texture(high1_t, xy);
+        temp = interp_elev(z_scale * other.z, other.t, low1.t, high1.t, 0.);
         frag_color = heatmap(temp);
         break;
     }
