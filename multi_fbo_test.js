@@ -52,9 +52,13 @@ precision highp sampler2D;
 #define T_eq_shade 0.6
 #define Tao_surface 100.
 #define Tao_surface_to_air 3000.
+// #define Tao_surface_to_air_water (100000. * Tao_surface_to_air)
+// #define Tao_surface_to_air_water 3000.
+#define lake_depth 0.1
 #define Tao_air_from_surface 100.
 #define Tao_radiation 5.
 #define C_surface (Tao_surface_to_air / Tao_air_from_surface)
+#define C_surface_water (C_surface * 100.)
 #define K0 (C_surface / Tao_surface)
 #define K1 (1. / Tao_air_from_surface)
 #define K2 (1. / Tao_radiation)
@@ -320,12 +324,11 @@ void main(){
     vec4 xyz = vec4(xy, other_out.z * z_scale, 1.);
     vec4 sun_coord = M_sun * xyz;
     vec4 light = texture(light_t, sun_coord.xy / 2. + 0.5);
-    // other_out.t += Q_in - other_out.t * K0;
     other_out.t += (
-        mix(Q_in_shade, Q_in, (sun_coord.z - light.a > 0.001 ? 0. : light.x))  // heat from sun
-        - other_out.t * K0                                     // heat lost to radiation
-        - (other_out.t - low1_out.t) * K1                      // heat lost to air via convection
-    ) / C_surface;
+        mix(Q_in_shade, Q_in, (sun_coord.z - light.a > 0.001 ? 0. : light.x))        // heat from sun
+        - other_out.t * K0                                                           // heat lost to radiation
+        - (other_out.t - low1_out.t) * K1                                            // heat lost to air via convection
+    ) / mix(C_surface, C_surface_water, max(other_out.w / lake_depth, 0.));
     low1_out.t += (other_out.t - low1_out.t) * K1;                        // heat gained from ground
     high1_out.t -= high1_out.t * K2;                                      // heat lost to radiation
     vec2 pen_vect = pen_vel * pen_strength;
@@ -457,7 +460,8 @@ void main(){
         frag_color = vec4(uplift, elevation, -uplift, 1.);
         break;
     case 4:  // clouds
-        frag_color = vec4(0., low1.a, high1.a, 1.);
+        other = texture(other_t, xy);
+        frag_color = float(mod(other.w, 0.25) > 0.01) * vec4(0., other.w * 0.5, other.w, 1.);
         break;
     case 5:  // realistic
         other = texture(other_t, xy);
@@ -1061,7 +1065,14 @@ function init(){
     let sim_fbo = gl.createFramebuffer();
     let sim_depthbuffer = gl.createRenderbuffer();
     let tex_names = ['low0_t', 'low1_t', 'high0_t', 'high1_t', 'mid_t', 'other_t'];
-    let tex_defaults = [[0.3, 0, 0, 0], [0, 3, 0, 0], [0.3, 0, 0, 0], [0, 0.5, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]];
+    let tex_defaults = [
+        [0.3, 0, 0, 0],  // low0 wind [0.3, 0.3] 
+        [0, 1, 0, 0],    // low1 surface temp 1
+        [0.3, 0, 0, 0],  // high0
+        [0, 0.5, 0, 0],  // high1
+        [0, 1, 0, 0],    // other temp 1
+        [0, 0, 0, 0]     // light
+    ];
     let textures = [];
     for (var i = 0; i < tex_names.length; i++){
         textures.push({
