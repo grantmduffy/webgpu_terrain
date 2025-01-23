@@ -369,7 +369,7 @@ function load_url(path, name=null){
                 name_el = document.getElementById('model_name');
                 name_el.innerText = name;
             } catch (err) {
-                console.llg(err);
+                console.log(err);
                 failed_to_load(name);
             }
         } else if (this.readyState == 4){
@@ -379,6 +379,63 @@ function load_url(path, name=null){
     req.send();
 }
 
+
+function load_drive(fileName){
+
+    const apiKey = 'AIzaSyAScIwlygRBqXL9gv4qxByVladyh6N_h28';
+    const folderId = '1O-ZEV1dMVXO9e7Z9e710VGhNSJu74MBs';
+
+    function initApiClient() {
+        gapi.client.init({
+            apiKey: apiKey
+        }).then(function() {
+            return gapi.client.load('drive', 'v3');
+        }).then(function() {
+            fetchFileByName();
+        }).catch(function(error) {
+            console.error('Error initializing Google API client:', error);
+        });
+    }
+
+    function fetchFileByName() {
+        // Perform the search query to find the file by name in the specified folder
+        gapi.client.drive.files.list({
+            q: `'${folderId}' in parents and name='${fileName}' and trashed=false`,
+            fields: 'files(id, name)', // Limit the fields returned to only what's needed
+        }).then(function(response) {
+            const files = response.result.files;
+            if (files && files.length > 0) {
+                const file = files[0]; // Get the first matching file
+                console.log('File found:', file);
+                fetchBinaryFile(file.id);
+            } else {
+                console.log('No files found with the specified name.');
+                document.getElementById('fileContent').textContent = 'File not found.';
+            }
+        }).catch(function(error) {
+            console.error('Error fetching file by name:', error);
+        });
+    }
+
+    function fetchBinaryFile(fileId) {
+        const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${apiKey}`;
+        fetch(url).then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.blob();
+        }).then(blob => {
+            blob.name = fileName;
+            load_file({ target: { files: [blob] } });
+        })
+        .catch(error => {
+            console.error('Error fetching binary file:', error);
+        });
+    }
+
+    gapi.load('client', initApiClient);
+
+}
 
 function load_data(buffer){
     let shape = new Uint16Array(buffer.slice(0, 4));
@@ -640,8 +697,12 @@ function init(){
     // );
 
     compile_layers();
-    load_url('rainier.gmd', 'Mount Rainier');
-
+    let url_params = new URLSearchParams(window.location.search);
+    if (url_params.has('file')){
+        load_drive(url_params.get('file'));
+    } else {
+        load_url('rainier.gmd', 'Mount Rainier');
+    }
     let uniform_inputs = document.getElementsByClassName('uniform-input');
     for (var i = 0; i < uniform_inputs.length; i++){
         uniform_inputs[i].onpointerdown = hide_modal;
