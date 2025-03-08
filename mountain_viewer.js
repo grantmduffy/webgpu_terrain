@@ -382,7 +382,7 @@ function load_url(path, name=null){
 
 function load_drive(fileName){
 
-    const apiKey = 'AIzaSyAScIwlygRBqXL9gv4qxByVladyh6N_h28';
+    const apiKey = 'AIzaSyDIAL8K5XVHkqJVMW5VNhKObOA-jiSrauU';
     const folderId = '1O-ZEV1dMVXO9e7Z9e710VGhNSJu74MBs';
 
     function initApiClient() {
