@@ -31,16 +31,33 @@ class MapView {
      */
     setupMapModal() {
         // Initialize map when modal is shown
-        $('#map_modal').on('shown.bs.modal', () => {
-            if (!this.leafletMap) {
-                this.initializeMap();
-            } else {
-                // Invalidate size when modal is shown (required for Leaflet in modals)
-                setTimeout(() => {
-                    this.leafletMap.invalidateSize();
-                }, 100);
-            }
-        });
+        const mapModal = document.getElementById('map_modal');
+        if (mapModal) {
+            // Listen for modal show events using MutationObserver
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                        const target = mutation.target;
+                        if (target.classList.contains('show')) {
+                            // Modal is being shown
+                            setTimeout(() => {
+                                if (!this.leafletMap) {
+                                    this.initializeMap();
+                                } else {
+                                    // Invalidate size when modal is shown (required for Leaflet in modals)
+                                    this.leafletMap.invalidateSize();
+                                }
+                            }, 100);
+                        }
+                    }
+                });
+            });
+            
+            observer.observe(mapModal, {
+                attributes: true,
+                attributeFilter: ['class']
+            });
+        }
 
         // Setup fetch elevation button
         const fetchBtn = document.getElementById('fetchElevationBtn');
@@ -200,7 +217,9 @@ class MapView {
             this.showStatusMessage('Elevation data loaded successfully!', 'success');
             
             // Close the modal after successful load
-            $('#map_modal').modal('hide');
+            if (window.modalHandler) {
+                window.modalHandler.hide();
+            }
             
         } catch (error) {
             console.error('Error fetching elevation data:', error);

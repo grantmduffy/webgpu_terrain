@@ -34,186 +34,9 @@ class Renderer {
         this.mouse_zoom = -200;
         this.mouse_pos = [0, 0];
         
-        // Shader sources
-        this.shaderSources = this.initShaderSources();
-    }
-
-    /**
-     * Initialize shader source code
-     */
-    initShaderSources() {
-        return {
-            sun_vs: `
-                in vec2 vert_pos;
-                out vec2 uv;
-
-                void main(){
-                    uv = vert_pos + 0.5;
-                    vec4 world_coord = vec4(
-                        vert_pos * vec2(print_width, print_height), 
-                        texture(elevation, uv).x - (elev_range.y + elev_range.x) / 2.,
-                        1.
-                    );
-                    gl_Position = M_proj_sun * world_coord;
-                }
-            `,
-            
-            sun_fs: `
-                in vec2 uv;
-
-                void main(){
-                    frag_color = vec4(0., gl_FragCoord.z, texture(elevation, uv).y, 1.);
-                }
-            `,
-            
-            camera_vs: `
-                in vec2 vert_pos;
-                out vec4 uv_sun;
-                out vec4 world_coord;
-
-                void main(){
-                    vec2 uv = vert_pos + 0.5;
-                    world_coord = vec4(
-                        vert_pos * vec2(print_width, print_height), 
-                        texture(elevation, uv).x - (elev_range.y + elev_range.x) / 2.,
-                        1.
-                    );
-                    gl_Position = M_proj * world_coord;
-                    uv_sun = (M_proj_sun * world_coord) / 2. + 0.5;
-                }
-            `,
-            
-            camera_fs: `
-                in vec4 uv_sun;
-                in vec4 world_coord;
-
-                vec4 convert_colorspace(vec3 intensity){
-                    return vec4(1. - exp(-exposure * intensity), 1.);
-                }
-
-                vec2 world_to_uv(vec2 world){
-                    return world / vec2(print_width, print_height) + 0.5;
-                }
-
-                void main(){
-                    vec2 uv = world_to_uv(world_coord.xy);
-
-                    vec4 e = texture(elevation, uv);
-                    vec4 e_n = texture(elevation, world_to_uv(world_coord.xy + vec2(0., eps)));
-                    vec4 e_s = texture(elevation, world_to_uv(world_coord.xy + vec2(0., -eps)));
-                    vec4 e_e = texture(elevation, world_to_uv(world_coord.xy + vec2(eps, 0.)));
-                    vec4 e_w = texture(elevation, world_to_uv(world_coord.xy + vec2(-eps, 0.)));
-                    
-                    vec3 norm = vec3(
-                        (e_w.x - e_e.x) / (2. * eps),
-                        (e_s.x - e_n.x) / (2. * eps),
-                        1.
-                    );
-                    vec4 sun_vector = M_sun * vec4(0., 0., 1., 1.);
-                    
-                    vec3 rgb_intensity = ambient_intensity * ambient_color.rgb;
-
-                    // calculate ambient occlusion
-                    float z1 = texture(elevation, uv).x;
-                    float curvature = 0.;
-                    for (int i = 0; i < n_ao; i++){
-                        vec2 dir = ao_eps * pow(rand_2d(uv + float(i)), vec2(ao_power));
-                        float dir_len = length(dir);
-                        float z0 = texture(elevation, world_to_uv(world_coord.xy - dir)).x;
-                        float z2 = texture(elevation, world_to_uv(world_coord.xy + dir)).x;
-                        float f1 = (z2 - z0) / (2. * dir_len);
-                        float f2 = (z2 - 2. * z1 + z0) / (dir_len * dir_len);
-                        curvature += max(f2 / pow(1. + f1 * f1, 3. / 2.), 0.);
-                    }
-                    curvature /= float(n_ao);
-                    rgb_intensity *= exp(-curvature * ambient_occlusion);
-
-                    // shadow map
-                    float shadow_val = 0.;
-                    for (int i = 0; i < n_shadow; i++){
-                        float shadow_depth = texture(sun_layer, uv_sun.xy + shadow_softness * rand_2d(uv_sun.xy + float(i))).g - uv_sun.z + shadow_eps;
-                        shadow_val += float(shadow_depth > 0.);
-                    }
-                    shadow_val /= float(n_shadow);
-                    rgb_intensity += shadow_val * sun_color.rgb * sun_intensity * clamp(dot(norm, sun_vector.xyz), 0., 1.);
-                    
-                    // convert to rgb
-                    frag_color = convert_colorspace(rgb_intensity);
-                    frag_color.rgb = pow(frag_color.rgb, vec3(gamma));
-                }
-            `,
-            
-            wall_vs: `
-                in vec3 vert_pos;
-                in vec3 norm;
-                out vec3 xyz;
-                out vec3 norm_vec;
-                out vec2 uv;
-
-                void main(){
-                    float z;
-                    xyz = vec3(
-                        vert_pos.xy * vec2(print_width, print_height) / 2.,
-                        vert_pos.z * (elev_range.y - elev_range.x + base_thickness * 2.) / 2. - base_thickness
-                    );
-                    uv = (vert_pos.xy + 1.) / 2.;
-                    gl_Position = M_proj * vec4(xyz, 1.);
-                    norm_vec = norm;
-                }
-            `,
-            
-            wall_fs: `
-                in vec3 norm_vec;
-                in vec2 uv;
-                in vec3 xyz;
-
-                vec4 convert_colorspace(vec3 intensity){
-                    return vec4(1. - exp(-exposure * intensity), 1.);
-                }
-
-                void main(){
-                    vec4 sun_vector = M_sun * vec4(0., 0., 1., 1.);
-                    vec3 rgb_intensity = ambient_intensity * ambient_color.rgb;
-                    rgb_intensity += sun_color.rgb * sun_intensity * clamp(dot(norm_vec, sun_vector.xyz), 0., 1.);
-                    frag_color = convert_colorspace(rgb_intensity);
-                    frag_color.rgb = pow(frag_color.rgb, vec3(gamma));
-                    if (xyz.z > texture(elevation, uv).x - (elev_range.y + elev_range.x) / 2.){
-                        frag_color.a = 0.0;
-                    }
-                }
-            `,
-            
-            wall_sun_vs: `
-                in vec3 vert_pos;
-                in vec3 norm;
-                out vec3 xyz;
-                out vec3 norm_vec;
-                out vec2 uv;
-
-                void main(){
-                    float z;
-                    xyz = vec3(
-                        vert_pos.xy * vec2(print_width, print_height) / 2.,
-                        vert_pos.z * (elev_range.y - elev_range.x + base_thickness * 2.) / 2. - base_thickness
-                    );
-                    uv = (vert_pos.xy + 1.) / 2.;
-                    gl_Position = M_proj_sun * vec4(xyz, 1.);
-                    norm_vec = norm;
-                }
-            `,
-            
-            wall_sun_fs: `
-                in vec2 uv;
-                in vec3 xyz;
-
-                void main(){
-                    frag_color = vec4(0., gl_FragCoord.z, texture(elevation, uv).y, 1.);
-                    if (xyz.z - .3 > texture(elevation, uv).x - (elev_range.y + elev_range.x) / 2.){
-                        frag_color.a = 0.0;
-                    }
-                }
-            `
-        };
+        // Shader loader and sources
+        this.shaderLoader = new ShaderLoader();
+        this.shaderSources = null;
     }
 
     /**
@@ -253,6 +76,14 @@ vec3 rand_3d(vec2 co){
     async init() {
         // Initialize global GLSL code first
         this.initializeGlobalGLSL();
+        
+        // Load shaders from external files
+        try {
+            this.shaderSources = await this.shaderLoader.loadAllShaders();
+        } catch (error) {
+            console.error('Failed to load shaders:', error);
+            throw new Error('Shader loading failed: ' + error.message);
+        }
         
         // Get canvas and container
         this.canvas = document.getElementById('gl-canvas');
