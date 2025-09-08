@@ -27,13 +27,22 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   
   <!-- zlib -->
-  <script src="pako.js"></script>
+  <script src="js/lib/pako.js"></script>
     
-  <script src="gl_layers.js"></script>
-  <script src="gl-matrix-min.js"></script>
+  <script src="js/lib/gl_layers.js"></script>
+  <script src="js/lib/gl-matrix-min.js"></script>
   <script src="https://apis.google.com/js/api.js"></script>
-  <script src="mountain_viewer.js"></script>
-  <link rel="stylesheet" href="mountian_viewer.css">
+  
+  <!-- New modular structure -->
+  <script src="js/Renderer.js"></script>
+  <script src="js/InputHandler.js"></script>
+  <script src="js/DataLoader.js"></script>
+  <script src="js/MapView.js"></script>
+  <script src="js/UIManager.js"></script>
+  <script src="js/App.js"></script>
+  <script src="js/main.js"></script>
+  
+  <link rel="stylesheet" href="css/mountain_viewer.css">
   
   <style>
 
@@ -44,7 +53,7 @@
 </style>
 </head>
 
-<body style="height: 100%; padding: 0; margin: 0"  onload="init()">
+<body style="height: 100%; padding: 0; margin: 0">
 
 <div class="d-flex flex-column" style="width: 100%; height: 100%;">
 
@@ -61,16 +70,16 @@
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown" aria-expanded="false">Model</a>
           <ul class="dropdown-menu w-100">
-            <li><a class="dropdown-item" href="#" onclick="load_url('rainier.gmd', 'Mount Rainier')">Mount Rainier</a></li>
-            <li><a class="dropdown-item" href="#" onclick="load_url('st_helens.gmd', 'Mount St. Helens')">Mount St. Helens</a></li>
-            <li><a class="dropdown-item" href="#" onclick="load_url('zion.gmd', 'Zion Canyon')">Zion Canyon</a></li>
-            <li><a class="dropdown-item" href="#" onclick="load_url('enchantments.gmd', 'The Enchantments')">The Enchantments</a></li>
-            <li><a class="dropdown-item" href="#" onclick="load_url('denali.gmd', 'Denali')">Denali</a></li>
-            <li><a class="dropdown-item" href="#" onclick="load_url('grand_teton.gmd', 'Grand Teton')">Grand Teton</a></li>
-            <li><a class="dropdown-item" href="#" onclick="load_url('half_dome.gmd', 'Half Dome')">Half Dome</a></li>
+            <li><a class="dropdown-item" href="#">Mount Rainier</a></li>
+            <li><a class="dropdown-item" href="#">Mount St. Helens</a></li>
+            <li><a class="dropdown-item" href="#">Zion Canyon</a></li>
+            <li><a class="dropdown-item" href="#">The Enchantments</a></li>
+            <li><a class="dropdown-item" href="#">Denali</a></li>
+            <li><a class="dropdown-item" href="#">Grand Teton</a></li>
+            <li><a class="dropdown-item" href="#">Half Dome</a></li>
             <li><hr class="dropdown-divider"></li>
             <li>
-              <input class="form-control" type="file" id="file-selector" accept=".gmd" onchange="load_file(event)">
+              <input class="form-control" type="file" id="file-selector" accept=".gmd">
             </li>
           </ul>
         </li>
@@ -78,7 +87,7 @@
           Mount Rainier
         </li>
         <li class="nav-item">
-          <button id="render" class="btn btn-light" style="margin-left: 5px;" onclick="download_render()"><img height="25" src="camera.svg"></button>
+          <button id="render" class="btn btn-light" style="margin-left: 5px;"><img height="25" src="assets/camera.svg"></button>
         </li>
       </ul>
     </div>
@@ -108,19 +117,6 @@ style="
   top: 0;
   left: 0;
 "
-
-onmousedown="mouse_down(event);mouse_move(event);"
-ontouchstart="mouse_down(event);mouse_move(event);"
-
-onmousemove="mouse_move(event);"
-ontouchmove="mouse_move(event);"
-
-onmousewheel="handle_scroll(event);"
-
-onmouseup="mouse_up(event);"
-ontouchend="mouse_up(event);"
-onmouseout="mouse_up(event);"
-onmouseleave="mouse_move(event);"  
 ></canvas>
 
 <div>
@@ -134,7 +130,7 @@ onmouseleave="mouse_move(event);"
               <div class="modal-body d-flex flex-column" id="inputs">
               </div>
               <div class="modal-footer">
-                  <button type="button" class="btn btn-secondary" onclick="reset_to_defaults();">Reset</button>
+                  <button type="button" class="btn btn-secondary">Reset</button>
                   <button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
               </div>
           </div>
@@ -186,7 +182,7 @@ onmouseleave="mouse_move(event);"
 
               </div>
               <div class="modal-footer">
-                  <button type="button" class="btn btn-secondary" onclick="reset_to_defaults();">Reset</button>
+                  <button type="button" class="btn btn-secondary">Reset</button>
                   <button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
               </div>
           </div>
