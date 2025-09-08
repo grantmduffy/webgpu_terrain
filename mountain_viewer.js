@@ -380,6 +380,33 @@ function load_url(path, name=null){
 }
 
 
+async function load_open_topo(){
+
+    const dataset = 'SRTMGL3';
+    const south = 46.82872428833321;
+    const north = 46.875682778386675;
+    const west = -121.8003717439927;
+    const east = -121.72343693320035;
+    const apiKey = 'b5c5195df91a52cf4c7cc63bfebec8d8';
+
+    const apiUrl = new URL('https://portal.opentopography.org/API/globaldem');
+    apiUrl.searchParams.append('demtype', dataset);
+    apiUrl.searchParams.append('south', south);
+    apiUrl.searchParams.append('north', north);
+    apiUrl.searchParams.append('west', west);
+    apiUrl.searchParams.append('east', east);
+    apiUrl.searchParams.append('outputFormat', 'GTiff');
+    apiUrl.searchParams.append('API_Key', apiKey);
+
+    const response = await fetch(apiUrl.toString());
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    if (response.status === 204) throw new Error('No elevation data available for this region');
+
+    const elevationBlob = await response.blob();
+    await load_geo_tiff(elevationBlob);
+}
+
+
 function load_drive(fileName){
 
     const apiKey = 'AIzaSyDIAL8K5XVHkqJVMW5VNhKObOA-jiSrauU';
@@ -436,6 +463,44 @@ function load_drive(fileName){
     gapi.load('client', initApiClient);
 
 }
+
+const uint16_max = Math.pow(2, 16) - 1;
+const earth_radius = 6378137;
+
+async function load_geo_tiff(blob) {
+        const arrayBuffer = await blob.arrayBuffer();
+        const tiff = await GeoTIFF.fromArrayBuffer(arrayBuffer);
+        const image = await tiff.getImage();
+        const rasters = await image.readRasters();
+        const elevationData = rasters[0];
+        const bbox = image.getBoundingBox();
+        const physical_height = earth_radius * (bbox[3] - bbox[1]) * Math.PI / 180;
+        const physical_width = earth_radius * Math.cos(0.5 * (bbox[1] + bbox[3]) * Math.PI / 180) * (bbox[2] - bbox[0]) * Math.PI / 180
+        const w = 100.0;
+        const h = w * physical_height / physical_width;
+        const scale = h / physical_height;
+        
+        const maxElev = elevationData.reduce((max, current) => {
+            return (current > max) ? current : max;
+        }, -Infinity);
+        const minElev = elevationData.reduce((min, current) => {
+            return (current < min) ? current : min;
+        }, Infinity);
+
+        uniforms['print_width'].value = w;
+        uniforms['print_height'].value = h;
+        uniforms['elev_range'].value = [minElev * scale, maxElev * scale];
+
+        const img_data_rgba = new Float32Array(elevationData.length * 4);
+        for (let i = 0; i < elevationData.length; i++){
+            img_data_rgba[i * 4] = elevationData[i] * scale;
+            img_data_rgba[i * 4 + 3] = 1.0;
+        }
+        m = [-w / 2, -h / 2, 0, 1, w / 2, -h / 2, 0, 1, w / 2, h / 2, 0, 1, -w / 2, h / 2, 0, 1];
+        for (var i = 0; i < 16; i++) M_corners[i] = m[i];
+        create_texture(image.getWidth(), image.getHeight(), img_data_rgba, elevation_texture_offset);
+    }
+
 
 function load_data(buffer){
     let shape = new Uint16Array(buffer.slice(0, 4));
@@ -757,4 +822,195 @@ function init(){
     }
     requestAnimationFrame(loop);
 
+
+    // setup map - initialize when modal is shown
+    setupMapModal();
+
+}
+
+// Global variables for map functionality
+let leafletMap = null;
+let selectionRectangle = null;
+let selectedBounds = null;
+let isSelecting = false;
+let selectionStart = null;
+
+function setupMapModal() {
+    // Initialize map when modal is shown
+    $('#map_modal').on('shown.bs.modal', function () {
+        if (!leafletMap) {
+            initializeMap();
+        } else {
+            // Invalidate size when modal is shown (required for Leaflet in modals)
+            setTimeout(() => {
+                leafletMap.invalidateSize();
+            }, 100);
+        }
+    });
+
+    // Setup fetch elevation button
+    document.getElementById('fetchElevationBtn').addEventListener('click', fetchElevationData);
+}
+
+function initializeMap() {
+    leafletMap = L.map('map_div', {
+        center: [46.8523, -121.7603],
+        zoom: 10,
+        zoomControl: true,
+        scrollWheelZoom: true
+    });
+    
+    L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        maxZoom: 17,
+        attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
+    }).addTo(leafletMap);
+    
+    setupMapSelection(leafletMap);
+}
+
+function setupMapSelection(map) {
+    let startLatLng = null;
+    let isDrawing = false;
+    let isPanning = false;
+    let panStart = null;
+
+    map.on('mousedown', function(e) {
+        if (e.originalEvent.button === 0) { // Left click for selection
+            isDrawing = true;
+            startLatLng = e.latlng;
+            
+            if (selectionRectangle) {
+                map.removeLayer(selectionRectangle);
+            }
+            
+            map.dragging.disable();
+        } else if (e.originalEvent.button === 2) { // Right click for panning
+            isPanning = true;
+            panStart = e.containerPoint;
+            map.getContainer().style.cursor = 'move';
+            e.originalEvent.preventDefault(); // Prevent context menu on mousedown
+        }
+    });
+
+    map.on('mousemove', function(e) {
+        if (isDrawing) {
+            if (selectionRectangle) {
+                map.removeLayer(selectionRectangle);
+            }
+            const bounds = L.latLngBounds(startLatLng, e.latlng);
+            selectionRectangle = L.rectangle(bounds, {
+                className: 'leaflet-selection-rectangle',
+                fillOpacity: 0.1,
+                weight: 2
+            }).addTo(map);
+        } else if (isPanning) {
+            if (panStart) {
+                const delta = e.containerPoint.subtract(panStart);
+                map.panBy(delta.multiplyBy(-1), { animate: false });
+                panStart = e.containerPoint;
+            }
+        }
+    });
+
+    map.on('mouseup', function(e) {
+        if (e.originalEvent.button === 0 && isDrawing) { // Left click release
+            isDrawing = false;
+            selectedBounds = L.latLngBounds(startLatLng, e.latlng);
+            map.dragging.enable();
+            updateSelectionStatus();
+        } else if (e.originalEvent.button === 2 && isPanning) { // Right click release
+            isPanning = false;
+            map.getContainer().style.cursor = '';
+        }
+    });
+
+    // Prevent context menu on right click up
+    map.on('contextmenu', function(e) {
+        e.originalEvent.preventDefault();
+    });
+}
+
+function updateSelectionStatus() {
+    const statusEl = document.getElementById('statusMessage');
+    if (selectedBounds) {
+        const south = selectedBounds.getSouth().toFixed(6);
+        const north = selectedBounds.getNorth().toFixed(6);
+        const west = selectedBounds.getWest().toFixed(6);
+        const east = selectedBounds.getEast().toFixed(6);
+        
+        statusEl.innerHTML = `
+            <strong>Selected Region:</strong><br>
+            North: ${north}°<br>
+            South: ${south}°<br>
+            East: ${east}°<br>
+            West: ${west}°
+        `;
+        statusEl.className = 'status-message success';
+        statusEl.style.display = 'block';
+    }
+}
+
+async function fetchElevationData() {
+    if (!selectedBounds) {
+        showStatusMessage('Please select a region on the map first.', 'error');
+        return;
+    }
+
+    const dataset = document.getElementById('datasetSelect').value;
+    const south = selectedBounds.getSouth();
+    const north = selectedBounds.getNorth();
+    const west = selectedBounds.getWest();
+    const east = selectedBounds.getEast();
+    
+    // Validate selection size
+    const latDiff = Math.abs(north - south);
+    const lngDiff = Math.abs(east - west);
+    
+    if (latDiff > 2 || lngDiff > 2) {
+        showStatusMessage('Selected region is too large. Please select a smaller area (max 2° x 2°).', 'error');
+        return;
+    }
+
+    showStatusMessage('Fetching elevation data...', 'loading');
+
+    try {
+        const apiKey = 'b5c5195df91a52cf4c7cc63bfebec8d8';
+        const apiUrl = new URL('https://portal.opentopography.org/API/globaldem');
+        apiUrl.searchParams.append('demtype', dataset);
+        apiUrl.searchParams.append('south', south);
+        apiUrl.searchParams.append('north', north);
+        apiUrl.searchParams.append('west', west);
+        apiUrl.searchParams.append('east', east);
+        apiUrl.searchParams.append('outputFormat', 'GTiff');
+        apiUrl.searchParams.append('API_Key', apiKey);
+
+        const response = await fetch(apiUrl.toString());
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        if (response.status === 204) {
+            throw new Error('No elevation data available for this region');
+        }
+
+        const elevationBlob = await response.blob();
+        await load_geo_tiff(elevationBlob);
+        
+        showStatusMessage('Elevation data loaded successfully!', 'success');
+        
+        // Close the modal after successful load
+        $('#map_modal').modal('hide');
+        
+    } catch (error) {
+        console.error('Error fetching elevation data:', error);
+        showStatusMessage(`Error: ${error.message}`, 'error');
+    }
+}
+
+function showStatusMessage(message, type) {
+    const statusEl = document.getElementById('statusMessage');
+    statusEl.textContent = message;
+    statusEl.className = `status-message ${type}`;
+    statusEl.style.display = 'block';
 }
